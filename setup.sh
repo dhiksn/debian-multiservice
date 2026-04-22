@@ -464,6 +464,11 @@ zone "$REVERSE_ZONE" {
 };
 EOF
 
+    log_info "Membersihkan file database zone lama..."
+    [[ -f /etc/bind/db.$DNS_DOMAIN ]] && { mv /etc/bind/db.$DNS_DOMAIN /etc/bind/db.$DNS_DOMAIN.bak; log_info "Backup: db.$DNS_DOMAIN -> db.$DNS_DOMAIN.bak"; }
+    [[ -f /etc/bind/db.reverse ]] && { mv /etc/bind/db.reverse /etc/bind/db.reverse.bak; log_info "Backup: db.reverse -> db.reverse.bak"; }
+    rm -f /etc/bind/db.* /etc/bind/db.*.bak
+
     # Create Forward Zone File
     cat > /etc/bind/db.$DNS_DOMAIN << EOF
 ;
@@ -507,11 +512,8 @@ EOF
     named-checkzone $REVERSE_ZONE /etc/bind/db.reverse
 
     log_info "Restarting BIND9..."
-    systemctl enable --now bind9 || {
-        log_warning "Fallback: Trying restart only..."
-        systemctl restart bind9
-        systemctl enable bind9 || log_error "Warning: Failed to enable bind9 at boot"
-    }
+    systemctl enable --now named
+    systemctl restart named
 
     log_info "DNS Server berhasil diinstall dan dikonfigurasi!"
     log_info "Domain: $DNS_DOMAIN"
