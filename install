@@ -446,6 +446,7 @@ main() {
                 ;;
             6)
                 echo -e "\n${CYAN}${BOLD}Terima kasih telah menggunakan TechCorp Installer. Sampai jumpa!${NC}\n"
+                tput sgr0
                 exit 0
                 ;;
             *)

@@ -423,6 +423,7 @@ while true; do
             echo ""
             log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
             echo -e "${GREEN}Script by TechCorp - All rights reserved${NC}"
+            tput sgr0
             exit 0
             ;;
         *)
