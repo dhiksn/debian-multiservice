@@ -71,15 +71,26 @@ show_menu() {
     echo -e "${BOLD}${YELLOW}  ║${NC}  6. Exit                          ${BOLD}${YELLOW}║${NC}"
     echo -e "${BOLD}${YELLOW}  ╚══════════════════════════════════╝${NC}"
     echo ""
-    
-    # Gunakan printf dengan format specifier
-    printf "%sPilih opsi [1-6]: %s" "${CYAN}" "${NC}"
-    read -r CHOICE  # -r untuk mencegah escape karakter
-    
-    # Validasi input
-    if [[ -z "$CHOICE" ]]; then
-        CHOICE=""
-    fi
+}
+
+prompt_menu_choice() {
+    while true; do
+        printf "%sPilih opsi [1-6]: %s" "${CYAN}" "${NC}"
+        if ! IFS= read -r CHOICE < /dev/tty; then
+            echo ""
+            log_error "Gagal membaca input dari terminal."
+            return 1
+        fi
+
+        case "$CHOICE" in
+            [1-6])
+                return 0
+                ;;
+            *)
+                log_error "Pilihan tidak valid. Masukkan angka 1-6."
+                ;;
+        esac
+    done
 }
 
 # ─── System Update ───────────────────────────────────────────
@@ -446,6 +457,7 @@ main() {
 
     while true; do
         show_menu
+        prompt_menu_choice || exit 1
         case $CHOICE in
             1)
                 install_all
@@ -471,13 +483,10 @@ main() {
                 tput sgr0
                 exit 0
                 ;;
-            *)
-                log_error "Pilihan tidak valid. Masukkan angka 1-6."
-                ;;
         esac
 
         echo ""
-        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")"
+        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")" < /dev/tty
         # Hapus atau komentar baris di bawah ini
         # clear
         show_banner

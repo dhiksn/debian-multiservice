@@ -105,10 +105,6 @@ install_apache() {
     log_info "Menginstall apache2..."
     apt install -y apache2
 
-    log_info "Menjalankan dan mengaktifkan service Apache2..."
-    systemctl start apache2
-    systemctl enable apache2
-
     log_info "Membuat halaman index.html profil TechCorp..."
     cat > /var/www/html/index.html << 'HTMLEOF'
 <!DOCTYPE html>
@@ -201,6 +197,23 @@ HTMLEOF
     log_info "Mengatur permission file web..."
     chown -R www-data:www-data /var/www/html
     chmod -R 755 /var/www/html
+
+    log_info "Memvalidasi konfigurasi Apache2..."
+    if ! apache2ctl configtest; then
+        log_error "Konfigurasi Apache2 tidak valid. Periksa output configtest di atas."
+        return 1
+    fi
+
+    log_info "Menjalankan dan mengaktifkan service Apache2..."
+    if ! systemctl enable apache2; then
+        log_error "Gagal mengaktifkan service Apache2."
+        return 1
+    fi
+    if ! systemctl restart apache2; then
+        log_error "Apache2 gagal dijalankan. Coba cek: systemctl status apache2 --no-pager && journalctl -xeu apache2.service"
+        systemctl status apache2 --no-pager || true
+        return 1
+    fi
 
     log_info "Mengkonfigurasi firewall untuk port 80..."
     if command -v ufw &> /dev/null; then

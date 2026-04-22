@@ -395,6 +395,14 @@ show_menu() {
     echo -ne "${GREEN}Pilih menu (1-6): ${NC}"
 }
 
+prompt_menu_choice() {
+    if ! IFS= read -r choice < /dev/tty; then
+        echo ""
+        log_error "Gagal membaca input dari terminal."
+        exit 1
+    fi
+}
+
 # ==================== MAIN PROGRAM ====================
 
 check_root
@@ -402,7 +410,7 @@ check_root
 while true; do
     show_banner
     show_menu
-    read choice
+    prompt_menu_choice
     
     case $choice in
         1)
@@ -438,7 +446,7 @@ while true; do
     esac
     
     echo ""
-    read -p "Tekan Enter untuk kembali ke menu utama..."
+    read -r -p "Tekan Enter untuk kembali ke menu utama..." < /dev/tty
 done
 '@
 
