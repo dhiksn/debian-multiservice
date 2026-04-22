@@ -23,6 +23,10 @@ log_warn()    { echo -e "${YELLOW}[WARN]${NC}  $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 log_section() { echo -e "\n${CYAN}${BOLD}══════════════════════════════════════${NC}"; echo -e "${CYAN}${BOLD}  $1${NC}"; echo -e "${CYAN}${BOLD}══════════════════════════════════════${NC}\n"; }
 
+# Variable global untuk DNS (diisi saat install_dns dipanggil)
+DNS_DOMAIN=""
+DNS_IP=""
+
 # ─── Root Check ──────────────────────────────────────────────
 get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
@@ -258,9 +262,21 @@ HTMLEOF
     chmod -R 755 /var/www/html
 
     log_info "Mengatur ServerName Apache2..."
-    SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
-    if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
-        SERVER_NAME="localhost"
+    # Tanya apakah mau pakai domain dari DNS server yang sudah dikonfigurasi
+    USE_DNS_DOMAIN="n"
+    if [[ -n "$DNS_DOMAIN" && -n "$DNS_IP" ]]; then
+        echo -ne "${CYAN}DNS server sudah dikonfigurasi dengan domain '${DNS_DOMAIN}' (${DNS_IP}). Gunakan domain ini untuk Apache2? [y/N]: ${NC}"
+        read -r USE_DNS_DOMAIN < /dev/tty
+    fi
+
+    if [[ "$USE_DNS_DOMAIN" =~ ^[Yy]$ ]]; then
+        SERVER_NAME="$DNS_DOMAIN"
+        log_info "Menggunakan domain DNS sebagai ServerName: $SERVER_NAME"
+    else
+        SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
+        if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
+            SERVER_NAME="localhost"
+        fi
     fi
     cat > /etc/apache2/conf-available/servername.conf << APACHECONF
 ServerName $SERVER_NAME
@@ -294,6 +310,15 @@ APACHECONF
 
     choose_access_ip || return 1
 
+    # Jika pakai domain DNS, update record www di zone file ke IP Apache
+    if [[ "$USE_DNS_DOMAIN" =~ ^[Yy]$ && -f "/etc/bind/db.$DNS_DOMAIN" ]]; then
+        log_info "Memperbarui record 'www' di zone file DNS ke IP Apache ($APACHE_ACCESS_IP)..."
+        sed -i "s/^www\s\+IN\s\+A\s\+.*/www     IN      A       $APACHE_ACCESS_IP/" /etc/bind/db.$DNS_DOMAIN
+        named-checkzone "$DNS_DOMAIN" "/etc/bind/db.$DNS_DOMAIN" && systemctl reload named \
+            && log_info "Zone file diperbarui dan BIND9 di-reload." \
+            || log_warn "Gagal reload BIND9, cek konfigurasi zone file secara manual."
+    fi
+
     log_info "Mengkonfigurasi firewall untuk port 80..."
     if command -v ufw &> /dev/null; then
         ufw allow 80/tcp
@@ -302,7 +327,11 @@ APACHECONF
 
     log_info "Status Apache2:"
     systemctl status apache2 --no-pager | head -5
-    log_info "✅ Apache2 berhasil diinstall! Akses: http://${APACHE_ACCESS_IP}"
+    if [[ "$USE_DNS_DOMAIN" =~ ^[Yy]$ ]]; then
+        log_info "✅ Apache2 berhasil diinstall! Akses: http://${SERVER_NAME} (${APACHE_ACCESS_IP})"
+    else
+        log_info "✅ Apache2 berhasil diinstall! Akses: http://${APACHE_ACCESS_IP}"
+    fi
 }
 
 # ─── vsftpd Installation ─────────────────────────────────────
