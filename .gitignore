@@ -15,3 +15,6 @@ desktop.ini
 # Backup files
 *.bak
 *.backup
+
+Generate-DebianSetup.sh
+Generate-SetupScript.sh
