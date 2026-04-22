@@ -24,6 +24,10 @@ log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 log_section() { echo -e "\n${CYAN}${BOLD}══════════════════════════════════════${NC}"; echo -e "${CYAN}${BOLD}  $1${NC}"; echo -e "${CYAN}${BOLD}══════════════════════════════════════${NC}\n"; }
 
 # ─── Root Check ──────────────────────────────────────────────
+get_port_80_listener() {
+    ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
+}
+
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         log_error "Script ini harus dijalankan sebagai root. Gunakan: sudo bash install.sh"
@@ -198,6 +202,16 @@ HTMLEOF
     chown -R www-data:www-data /var/www/html
     chmod -R 755 /var/www/html
 
+    log_info "Mengatur ServerName Apache2..."
+    SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
+    if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
+        SERVER_NAME="localhost"
+    fi
+    cat > /etc/apache2/conf-available/servername.conf << APACHECONF
+ServerName $SERVER_NAME
+APACHECONF
+    a2enconf servername >/dev/null 2>&1 || true
+
     log_info "Memvalidasi konfigurasi Apache2..."
     if ! apache2ctl configtest; then
         log_error "Konfigurasi Apache2 tidak valid. Periksa output configtest di atas."
@@ -207,6 +221,14 @@ HTMLEOF
     log_info "Menjalankan dan mengaktifkan service Apache2..."
     if ! systemctl enable apache2; then
         log_error "Gagal mengaktifkan service Apache2."
+        return 1
+    fi
+    PORT_80_LISTENER="$(get_port_80_listener)"
+    if [[ -n "$PORT_80_LISTENER" && "$PORT_80_LISTENER" != *"apache2"* ]]; then
+        log_error "Port 80 sudah dipakai proses lain: $PORT_80_LISTENER"
+        if [[ "$PORT_80_LISTENER" == *"docker-proxy"* ]]; then
+            log_warn "Terdeteksi Docker memakai port 80. Stop container yang publish port 80 atau pindahkan Apache ke port lain."
+        fi
         return 1
     fi
     if ! systemctl restart apache2; then
