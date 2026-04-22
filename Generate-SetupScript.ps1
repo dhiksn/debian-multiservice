@@ -488,7 +488,7 @@ main() {
 main "$@"
 '@
 
-# Write install.sh
+# Write install.sh 
 $outputPath = "install.sh"
 $bashScript | Set-Content -Path $outputPath -Encoding UTF8 -NoNewline
 
