@@ -36,6 +36,10 @@ log_step() {
     echo -e "${CYAN}[STEP]${NC} $1"
 }
 
+get_port_80_listener() {
+    ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
+}
+
 # Fungsi untuk menampilkan banner
 show_banner() {
     echo -e "${BLUE}${BOLD}"
@@ -76,10 +80,7 @@ update_system() {
 install_apache() {
     log_step "Menginstall Apache2 Web Server..."
     apt install apache2 -y
-    
-    systemctl enable apache2
-    systemctl start apache2
-    
+
     log_info "Membuat halaman web custom..."
     cat > /var/www/html/index.html << 'HTMLEOF'
 <!DOCTYPE html>
@@ -221,8 +222,46 @@ HTMLEOF
     
     chown -R www-data:www-data /var/www/html/
     chmod -R 755 /var/www/html/
-    
+
+    log_info "Mengatur ServerName Apache2..."
+    SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
+    if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
+        SERVER_NAME="localhost"
+    fi
+    cat > /etc/apache2/conf-available/servername.conf << APACHECONF
+ServerName $SERVER_NAME
+APACHECONF
+    a2enconf servername >/dev/null 2>&1 || true
+
+    log_info "Memvalidasi konfigurasi Apache2..."
+    if ! apache2ctl configtest; then
+        log_error "Konfigurasi Apache2 tidak valid. Periksa output configtest di atas."
+        return 1
+    fi
+
+    log_info "Menjalankan dan mengaktifkan service Apache2..."
+    if ! systemctl enable apache2; then
+        log_error "Gagal mengaktifkan service Apache2."
+        return 1
+    fi
+    PORT_80_LISTENER="$(get_port_80_listener)"
+    if [[ -n "$PORT_80_LISTENER" && "$PORT_80_LISTENER" != *"apache2"* ]]; then
+        log_error "Port 80 sudah dipakai proses lain: $PORT_80_LISTENER"
+        if [[ "$PORT_80_LISTENER" == *"docker-proxy"* ]]; then
+            log_warning "Terdeteksi Docker memakai port 80. Stop container yang publish port 80 atau pindahkan Apache ke port lain."
+        fi
+        return 1
+    fi
+    if ! systemctl restart apache2; then
+        log_error "Apache2 gagal dijalankan. Coba cek: systemctl status apache2 --no-pager && journalctl -xeu apache2.service"
+        systemctl status apache2 --no-pager || true
+        return 1
+    fi
+
+    log_info "Status Apache2:"
+    systemctl status apache2 --no-pager | head -5
     log_info "Apache2 berhasil diinstall dan berjalan di port 80"
+    log_info "Apache2 dapat diakses di: http://$(hostname -I | awk '{print $1}')"
 }
 
 # Fungsi untuk install vsftpd
