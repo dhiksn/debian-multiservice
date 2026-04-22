@@ -68,7 +68,11 @@ show_menu() {
 prompt_menu_choice() {
     while true; do
         printf "\033[0;36mPilih opsi [1-6]: \033[0m"
-        IFS= read -r CHOICE
+        if ! IFS= read -r CHOICE < /dev/tty; then
+            echo ""
+            log_error "Gagal membaca input dari terminal."
+            return 1
+        fi
 
         case "$CHOICE" in
             [1-6])
@@ -445,7 +449,7 @@ main() {
 
     while true; do
         show_menu
-        prompt_menu_choice
+        prompt_menu_choice || exit 1
         case $CHOICE in
             1)
                 install_all
@@ -474,7 +478,7 @@ main() {
         esac
 
         echo ""
-        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")"
+        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")" < /dev/tty
         clear
         show_banner
     done
