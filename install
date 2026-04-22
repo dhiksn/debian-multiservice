@@ -465,13 +465,16 @@ main() {
                 ;;
             *)
                 log_error "Pilihan tidak valid. Masukkan angka 1-6."
+                sleep 1
+                clear
+                show_banner
+                continue
                 ;;
         esac
 
         echo ""
         read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")"
-        # Hapus atau komentar baris di bawah ini
-        # clear
+        clear
         show_banner
     done
 }
