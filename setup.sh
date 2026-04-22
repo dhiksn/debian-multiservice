@@ -507,8 +507,11 @@ EOF
     named-checkzone $REVERSE_ZONE /etc/bind/db.reverse
 
     log_info "Restarting BIND9..."
-    systemctl restart bind9
-    systemctl enable bind9
+    systemctl enable --now bind9 || {
+        log_warning "Fallback: Trying restart only..."
+        systemctl restart bind9
+        systemctl enable bind9 || log_error "Warning: Failed to enable bind9 at boot"
+    }
 
     log_info "DNS Server berhasil diinstall dan dikonfigurasi!"
     log_info "Domain: $DNS_DOMAIN"
