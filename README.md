@@ -14,19 +14,19 @@ Script otomatis untuk instalasi dan konfigurasi multi-service di Debian Linux.
 
 ### Linux (Debian)
 ```bash
-curl -s https://<username>.github.io/<repo>/install | sudo bash
+curl -s https://dhiksn.github.io/dws/install | sudo bash
 ```
 
 atau kalau mau versi `dwa/`:
 ```bash
-curl -s https://<username>.github.io/<repo>/dwa/setup | sudo bash
+curl -s https://dhiksn.github.io/dws/setup | sudo bash
 ```
 
 ### Manual
 ```bash
 # Clone repo
-git clone https://github.com/<username>/<repo>.git
-cd <repo>
+git clone https://github.com/dhiksn/dws.git
+cd dws
 
 # Jalankan script
 chmod +x install.sh
@@ -45,6 +45,14 @@ Kalau mau generate ulang `install.sh` dari PowerShell:
 Atau untuk versi `dwa/setup.sh`:
 ```powershell
 .\dwa\Generate-DebianSetup.ps1
+```
+
+---
+
+## Repository
+
+- GitHub: https://github.com/dhiksn/dws
+- Pages: https://dhiksn.github.io/dws
 ```
 
 ---
