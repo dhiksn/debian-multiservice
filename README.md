@@ -17,7 +17,7 @@ Script otomatis untuk instalasi dan konfigurasi multi-service di Debian Linux.
 curl -s https://dhiksn.github.io/dws/install | sudo bash
 ```
 
-atau kalau mau versi `dwa/`:
+atau kalau mau versi `setup`:
 ```bash
 curl -s https://dhiksn.github.io/dws/setup | sudo bash
 ```
