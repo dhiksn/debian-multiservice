@@ -459,6 +459,7 @@ main() {
 
         echo ""
         read -p "$(echo -e ${YELLOW}Tekan Enter untuk kembali ke menu...${NC})"
+        clear
         show_banner
     done
 }

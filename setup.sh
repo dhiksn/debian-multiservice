@@ -437,4 +437,5 @@ while true; do
     
     echo ""
     read -p "Tekan Enter untuk kembali ke menu utama..."
+    clear
 done
