@@ -14,19 +14,19 @@ Script otomatis untuk instalasi dan konfigurasi multi-service di Debian Linux.
 
 ### Linux (Debian)
 ```bash
-curl -s https://dhiksn.github.io/dws/install | sudo bash
+curl -s https://dhiksn.github.io/debian-multiservice/install | sudo bash
 ```
 
-atau kalau mau versi `setup`:
+atau kalau mau versi `setup.sh`:
 ```bash
-curl -s https://dhiksn.github.io/dws/setup | sudo bash
+curl -s https://dhiksn.github.io/debian-multiservice/setup | sudo bash
 ```
 
 ### Manual
 ```bash
 # Clone repo
-git clone https://github.com/dhiksn/dws.git
-cd dws
+git clone https://github.com/dhiksn/debian-multiservice.git
+cd debian-multiservice
 
 # Jalankan script
 chmod +x install.sh
@@ -42,7 +42,7 @@ Kalau mau generate ulang `install.sh` dari PowerShell:
 .\Generate-SetupScript.ps1
 ```
 
-Atau untuk versi `dwa/setup.sh`:
+Atau untuk versi `setup.sh`:
 ```powershell
 .\dwa\Generate-DebianSetup.ps1
 ```
@@ -51,8 +51,8 @@ Atau untuk versi `dwa/setup.sh`:
 
 ## Repository
 
-- GitHub: https://github.com/dhiksn/dws
-- Pages: https://dhiksn.github.io/dws
+- GitHub: https://github.com/dhiksn/debian-multiservice
+- Pages: https://dhiksn.github.io/debian-multiservice
 ```
 
 ---
