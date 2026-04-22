@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # Generate-SetupScript.ps1
 # PowerShell script to generate install.sh for Debian systems
 # ============================================================
@@ -21,6 +21,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
+
+# ─── Trap: Reset terminal on exit/interrupt ───────────────────
+trap 'tput sgr0; echo ""' EXIT INT TERM
 
 # ─── Logging Helper ──────────────────────────────────────────
 log_info()    { echo -e "${GREEN}[INFO]${NC}  $1"; }
@@ -68,7 +71,15 @@ show_menu() {
     echo -e "${BOLD}${YELLOW}  ║${NC}  6. Exit                          ${BOLD}${YELLOW}║${NC}"
     echo -e "${BOLD}${YELLOW}  ╚══════════════════════════════════╝${NC}"
     echo ""
-    read -p "$(echo -e ${CYAN}Pilih opsi [1-6]: ${NC})" CHOICE
+    
+    # Gunakan printf dengan format specifier
+    printf "%sPilih opsi [1-6]: %s" "${CYAN}" "${NC}"
+    read -r CHOICE  # -r untuk mencegah escape karakter
+    
+    # Validasi input
+    if [[ -z "$CHOICE" ]]; then
+        CHOICE=""
+    fi
 }
 
 # ─── System Update ───────────────────────────────────────────
@@ -351,13 +362,16 @@ SQLEOF
     log_info "Database 'wordpress_db' dan user 'wp_user' berhasil dibuat."
 
     log_info "Mendownload WordPress versi terbaru..."
-    cd /tmp
-    wget -q https://wordpress.org/latest.tar.gz -O wordpress.tar.gz
-    log_info "Mengekstrak WordPress..."
-    tar -xzf wordpress.tar.gz
-
-    log_info "Memindahkan WordPress ke /var/www/html/wordpress..."
-    mv wordpress /var/www/html/wordpress
+    # Gunakan subshell untuk isolasi
+    (
+        cd /tmp || { log_error "Gagal pindah ke /tmp"; return 1; }
+        wget -q https://wordpress.org/latest.tar.gz -O wordpress.tar.gz
+        log_info "Mengekstrak WordPress..."
+        tar -xzf wordpress.tar.gz
+        log_info "Memindahkan WordPress ke /var/www/html/wordpress..."
+        mv wordpress /var/www/html/wordpress
+        rm -f wordpress.tar.gz
+    )
 
     log_info "Mengkonfigurasi wp-config.php..."
     cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
@@ -454,6 +468,7 @@ main() {
                 ;;
             6)
                 echo -e "\n${CYAN}${BOLD}Terima kasih telah menggunakan TechCorp Installer. Sampai jumpa!${NC}\n"
+                tput sgr0
                 exit 0
                 ;;
             *)
@@ -462,7 +477,9 @@ main() {
         esac
 
         echo ""
-        read -p "$(echo -e ${YELLOW}Tekan Enter untuk kembali ke menu...${NC})"
+        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")"
+        # Hapus atau komentar baris di bawah ini
+        # clear
         show_banner
     done
 }

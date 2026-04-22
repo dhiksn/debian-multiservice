@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # ============================================================
 # install.sh - Multi-Service Installer for Debian
 # Services: Apache2, vsftpd, OpenSSH, WordPress (optional)
@@ -63,7 +63,15 @@ show_menu() {
     echo -e "${BOLD}${YELLOW}  ║${NC}  6. Exit                          ${BOLD}${YELLOW}║${NC}"
     echo -e "${BOLD}${YELLOW}  ╚══════════════════════════════════╝${NC}"
     echo ""
-    read -p "$(echo -e ${CYAN}Pilih opsi [1-6]: ${NC})" CHOICE
+    
+    # Gunakan printf dengan format specifier
+    printf "%sPilih opsi [1-6]: %s" "${CYAN}" "${NC}"
+    read -r CHOICE  # -r untuk mencegah escape karakter
+    
+    # Validasi input
+    if [[ -z "$CHOICE" ]]; then
+        CHOICE=""
+    fi
 }
 
 # ─── System Update ───────────────────────────────────────────
@@ -346,13 +354,16 @@ SQLEOF
     log_info "Database 'wordpress_db' dan user 'wp_user' berhasil dibuat."
 
     log_info "Mendownload WordPress versi terbaru..."
-    cd /tmp
-    wget -q https://wordpress.org/latest.tar.gz -O wordpress.tar.gz
-    log_info "Mengekstrak WordPress..."
-    tar -xzf wordpress.tar.gz
-
-    log_info "Memindahkan WordPress ke /var/www/html/wordpress..."
-    mv wordpress /var/www/html/wordpress
+    # Gunakan subshell untuk isolasi
+    (
+        cd /tmp || { log_error "Gagal pindah ke /tmp"; return 1; }
+        wget -q https://wordpress.org/latest.tar.gz -O wordpress.tar.gz
+        log_info "Mengekstrak WordPress..."
+        tar -xzf wordpress.tar.gz
+        log_info "Memindahkan WordPress ke /var/www/html/wordpress..."
+        mv wordpress /var/www/html/wordpress
+        rm -f wordpress.tar.gz
+    )
 
     log_info "Mengkonfigurasi wp-config.php..."
     cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
@@ -458,8 +469,9 @@ main() {
         esac
 
         echo ""
-        read -p "$(echo -e ${YELLOW}Tekan Enter untuk kembali ke menu...${NC})"
-        clear
+        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")"
+        # Hapus atau komentar baris di bawah ini
+        # clear
         show_banner
     done
 }
