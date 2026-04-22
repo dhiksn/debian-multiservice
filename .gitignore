@@ -16,5 +16,5 @@ desktop.ini
 *.bak
 *.backup
 
-Generate-DebianSetup.sh
-Generate-SetupScript.sh
+Generate-DebianSetup.ps1
+Generate-SetupScript.ps1
