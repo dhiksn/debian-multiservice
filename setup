@@ -36,10 +36,6 @@ log_step() {
     echo -e "${CYAN}[STEP]${NC} $1"
 }
 
-# Variable global untuk DNS (diisi saat install_dns dipanggil)
-DNS_DOMAIN=""
-DNS_IP=""
-
 get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
 }
@@ -111,7 +107,7 @@ show_banner() {
 EOF
     echo -e "${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
-    echo -e "${YELLOW}${BOLD}     Multi-Service Installer | Apache2 + vsftpd + OpenSSH + BIND9${NC}"
+    echo -e "${YELLOW}${BOLD}     Multi-Service Installer | Apache2 + vsftpd + OpenSSH${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
     echo ""
 }
@@ -282,21 +278,9 @@ HTMLEOF
     chmod -R 755 /var/www/html/
 
     log_info "Mengatur ServerName Apache2..."
-    # Tanya apakah mau pakai domain dari DNS server yang sudah dikonfigurasi
-    USE_DNS_DOMAIN="n"
-    if [[ -n "$DNS_DOMAIN" && -n "$DNS_IP" ]]; then
-        echo -ne "${CYAN}DNS server sudah dikonfigurasi dengan domain '${DNS_DOMAIN}' (${DNS_IP}). Gunakan domain ini untuk Apache2? [y/N]: ${NC}"
-        read -r USE_DNS_DOMAIN < /dev/tty
-    fi
-
-    if [[ "$USE_DNS_DOMAIN" =~ ^[Yy]$ ]]; then
-        SERVER_NAME="$DNS_DOMAIN"
-        log_info "Menggunakan domain DNS sebagai ServerName: $SERVER_NAME"
-    else
-        SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
-        if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
-            SERVER_NAME="localhost"
-        fi
+    SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
+    if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
+        SERVER_NAME="localhost"
     fi
     cat > /etc/apache2/conf-available/servername.conf << APACHECONF
 ServerName $SERVER_NAME
@@ -330,23 +314,10 @@ APACHECONF
 
     choose_access_ip || return 1
 
-    # Jika pakai domain DNS, update record www di zone file ke IP Apache
-    if [[ "$USE_DNS_DOMAIN" =~ ^[Yy]$ && -f "/etc/bind/db.$DNS_DOMAIN" ]]; then
-        log_info "Memperbarui record 'www' di zone file DNS ke IP Apache ($APACHE_ACCESS_IP)..."
-        sed -i "s/^www\s\+IN\s\+A\s\+.*/www     IN      A       $APACHE_ACCESS_IP/" /etc/bind/db.$DNS_DOMAIN
-        named-checkzone "$DNS_DOMAIN" "/etc/bind/db.$DNS_DOMAIN" && systemctl reload named \
-            && log_info "Zone file diperbarui dan BIND9 di-reload." \
-            || log_warn "Gagal reload BIND9, cek konfigurasi zone file secara manual."
-    fi
-
     log_info "Status Apache2:"
     systemctl status apache2 --no-pager | head -5
     log_info "Apache2 berhasil diinstall dan berjalan di port 80"
-    if [[ "$USE_DNS_DOMAIN" =~ ^[Yy]$ ]]; then
-        log_info "Apache2 dapat diakses di: http://${SERVER_NAME} (${APACHE_ACCESS_IP})"
-    else
-        log_info "Apache2 dapat diakses di: http://${APACHE_ACCESS_IP}"
-    fi
+    log_info "Apache2 dapat diakses di: http://${APACHE_ACCESS_IP}"
 }
 
 # Fungsi untuk install vsftpd
@@ -442,113 +413,6 @@ SSHEOF
     log_info "Private key disimpan di: /home/admin/.ssh/id_rsa"
 }
 
-# Fungsi untuk install DNS Server (BIND9)
-install_dns() {
-    log_step "Menginstall BIND9 DNS Server..."
-    apt install bind9 bind9utils bind9-doc -y
-
-    echo -ne "${CYAN}Masukkan nama domain custom (default: techcorp.com): ${NC}"
-    read -r DNS_DOMAIN < /dev/tty
-    if [[ -z "$DNS_DOMAIN" ]]; then
-        DNS_DOMAIN="techcorp.com"
-    fi
-
-    DNS_IP=$(select_ip "Pilih IP Address untuk DNS Server:")
-    if [[ -z "$DNS_IP" ]]; then
-        log_error "Gagal mendapatkan IP Address untuk DNS."
-        return 1
-    fi
-
-    log_info "Konfigurasi DNS untuk domain $DNS_DOMAIN dengan IP $DNS_IP"
-
-    # Ambil oktet untuk reverse zone
-    IFS='.' read -r o1 o2 o3 o4 <<< "$DNS_IP"
-    REVERSE_ZONE="${o3}.${o2}.${o1}.in-addr.arpa"
-
-    # Configure named.conf.options
-    cat > /etc/bind/named.conf.options << EOF
-options {
-    directory "/var/cache/bind";
-    recursion yes;
-    allow-query { any; };
-    forwarders {
-        8.8.8.8;
-        8.8.4.4;
-    };
-    dnssec-validation auto;
-    listen-on-v6 { any; };
-};
-EOF
-
-    # Configure named.conf.local
-    cat > /etc/bind/named.conf.local << EOF
-zone "$DNS_DOMAIN" {
-    type master;
-    file "/etc/bind/db.$DNS_DOMAIN";
-};
-
-zone "$REVERSE_ZONE" {
-    type master;
-    file "/etc/bind/db.reverse";
-};
-EOF
-
-    log_info "Membersihkan file database zone lama..."
-    [[ -f /etc/bind/db.$DNS_DOMAIN ]] && { mv /etc/bind/db.$DNS_DOMAIN /etc/bind/db.$DNS_DOMAIN.bak; log_info "Backup: db.$DNS_DOMAIN -> db.$DNS_DOMAIN.bak"; }
-    [[ -f /etc/bind/db.reverse ]] && { mv /etc/bind/db.reverse /etc/bind/db.reverse.bak; log_info "Backup: db.reverse -> db.reverse.bak"; }
-    rm -f /etc/bind/db.* /etc/bind/db.*.bak
-
-    # Create Forward Zone File
-    cat > /etc/bind/db.$DNS_DOMAIN << EOF
-;
-; BIND data file for $DNS_DOMAIN
-;
-\$TTL    604800
-@       IN      SOA     ns1.$DNS_DOMAIN. admin.$DNS_DOMAIN. (
-                              3         ; Serial
-                         604800         ; Refresh
-                          86400         ; Retry
-                        2419200         ; Expire
-                         604800 )       ; Negative Cache TTL
-;
-@       IN      NS      ns1.$DNS_DOMAIN.
-@       IN      A       $DNS_IP
-ns1     IN      A       $DNS_IP
-www     IN      A       $DNS_IP
-EOF
-
-    # Create Reverse Zone File
-    cat > /etc/bind/db.reverse << EOF
-;
-; BIND reverse data file for $REVERSE_ZONE
-;
-\$TTL    604800
-@       IN      SOA     ns1.$DNS_DOMAIN. admin.$DNS_DOMAIN. (
-                              3         ; Serial
-                         604800         ; Refresh
-                          86400         ; Retry
-                        2419200         ; Expire
-                         604800 )       ; Negative Cache TTL
-;
-@       IN      NS      ns1.$DNS_DOMAIN.
-$o4      IN      PTR     ns1.$DNS_DOMAIN.
-$o4      IN      PTR     www.$DNS_DOMAIN.
-EOF
-
-    log_info "Memeriksa konfigurasi BIND9..."
-    named-checkconf
-    named-checkzone $DNS_DOMAIN /etc/bind/db.$DNS_DOMAIN
-    named-checkzone $REVERSE_ZONE /etc/bind/db.reverse
-
-    log_info "Restarting BIND9..."
-    systemctl enable --now named
-    systemctl restart named
-
-    log_info "DNS Server berhasil diinstall dan dikonfigurasi!"
-    log_info "Domain : $DNS_DOMAIN"
-    log_info "IP Address : $DNS_IP"
-}
-
 # Fungsi untuk install WordPress
 install_wordpress() {
     log_step "Menginstall WordPress..."
@@ -596,7 +460,6 @@ SQLEOF
 install_all() {
     log_step "Memulai instalasi semua service..."
     update_system
-    install_dns
     install_apache
     install_ftp
     install_ssh
@@ -605,7 +468,6 @@ install_all() {
     log_info "Apache    : http://localhost"
     log_info "FTP       : ftp://localhost (user: admin, pass: 123)"
     log_info "SSH       : ssh admin@localhost (gunakan private key)"
-    log_info "DNS       : $DNS_DOMAIN -> $DNS_IP"
     log_info "WordPress : http://localhost/wordpress"
 }
 
@@ -619,11 +481,10 @@ show_menu() {
     echo -e "${CYAN} 2.${NC} Install Apache2 (Web Server)"
     echo -e "${CYAN} 3.${NC} Install FTP (vsftpd)"
     echo -e "${CYAN} 4.${NC} Install SSH (Secure Server)"
-    echo -e "${CYAN} 5.${NC} Install DNS Server (BIND9)"
-    echo -e "${CYAN} 6.${NC} Install WordPress (Optional)"
-    echo -e "${CYAN} 7.${NC} Exit"
+    echo -e "${CYAN} 5.${NC} Install WordPress (Optional)"
+    echo -e "${CYAN} 6.${NC} Exit"
     echo ""
-    echo -ne "${GREEN}Pilih menu (1-7): ${NC}"
+    echo -ne "${GREEN}Pilih menu (1-6): ${NC}"
 }
 
 prompt_menu_choice() {
@@ -662,13 +523,9 @@ while true; do
             ;;
         5)
             echo ""
-            install_dns
-            ;;
-        6)
-            echo ""
             install_wordpress
             ;;
-        7)
+        6)
             echo ""
             log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
             echo -e "${GREEN}Script by TechCorp - All rights reserved${NC}"
@@ -676,7 +533,7 @@ while true; do
             exit 0
             ;;
         *)
-            log_error "Pilihan tidak valid! Silakan pilih 1-7"
+            log_error "Pilihan tidak valid! Silakan pilih 1-6"
             sleep 2
             ;;
     esac
