@@ -3,7 +3,7 @@
 # =====================================================
 # Script: Multi-Service Installer for Debian
 # Author: TechCorp
-# Description: Install and configure Apache2, vsftpd, OpenSSH, and WordPress
+# Description: Install and configure Apache2, vsftpd, OpenSSH, BIND9 and WordPress
 # =====================================================
 
 # Warna untuk tampilan
@@ -40,6 +40,60 @@ get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
 }
 
+# Fungsi universal untuk memilih IP Address dari interface yang aktif
+select_ip() {
+    local prompt_msg="$1"
+    local interfaces=()
+    local line=""
+    local idx=1
+    local choice=""
+    local selected_if=""
+    local selected_ip=""
+
+    while IFS= read -r line; do
+        interfaces+=("$line")
+    done < <(ip -o -4 addr show up scope global | awk '{print $2 "|" $4}')
+
+    if [[ ${#interfaces[@]} -eq 0 ]]; then
+        selected_ip="$(hostname -I | awk '{print $1}')"
+        echo "$selected_ip"
+        return 0
+    fi
+
+    echo -e "${CYAN}${prompt_msg}${NC}" >&2
+    for line in "${interfaces[@]}"; do
+        echo -e "  ${YELLOW}${idx}.${NC} ${line%%|*} -> ${line##*|}" >&2
+        idx=$((idx + 1))
+    done
+
+    while true; do
+        printf "\033[0;36m%s [1-%d] (default 1): \033[0m" "Pilih interface" "${#interfaces[@]}" >&2
+        if ! IFS= read -r choice < /dev/tty; then
+            echo "" >&2
+            return 1
+        fi
+
+        if [[ -z "$choice" ]]; then
+            choice=1
+        fi
+
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
+            selected_if="${interfaces[$((choice - 1))]}"
+            selected_ip="${selected_if##*|}"
+            selected_ip="${selected_ip%%/*}"
+            echo "$selected_ip"
+            return 0
+        fi
+
+        log_error "Pilihan interface tidak valid." >&2
+    done
+}
+
+choose_access_ip() {
+    APACHE_ACCESS_IP=$(select_ip "Pilih interface untuk akses Apache2:")
+    [[ -n "$APACHE_ACCESS_IP" ]]
+}
+
 # Fungsi untuk menampilkan banner
 show_banner() {
     echo -e "${BLUE}${BOLD}"
@@ -53,7 +107,7 @@ show_banner() {
 EOF
     echo -e "${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
-    echo -e "${YELLOW}${BOLD}           Multi-Service Installer | Apache2 + vsftpd + OpenSSH${NC}"
+    echo -e "${YELLOW}${BOLD}     Multi-Service Installer | Apache2 + vsftpd + OpenSSH + BIND9${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
     echo ""
 }
@@ -258,10 +312,12 @@ APACHECONF
         return 1
     fi
 
+    choose_access_ip || return 1
+
     log_info "Status Apache2:"
     systemctl status apache2 --no-pager | head -5
     log_info "Apache2 berhasil diinstall dan berjalan di port 80"
-    log_info "Apache2 dapat diakses di: http://$(hostname -I | awk '{print $1}')"
+    log_info "Apache2 dapat diakses di: http://${APACHE_ACCESS_IP}"
 }
 
 # Fungsi untuk install vsftpd
@@ -357,6 +413,108 @@ SSHEOF
     log_info "Private key disimpan di: /home/admin/.ssh/id_rsa"
 }
 
+# Fungsi untuk install DNS Server (BIND9)
+install_dns() {
+    log_step "Menginstall BIND9 DNS Server..."
+    apt install bind9 bind9utils bind9-doc -y
+
+    echo -ne "${CYAN}Masukkan nama domain custom (default: techcorp.com): ${NC}"
+    read -r DNS_DOMAIN < /dev/tty
+    if [[ -z "$DNS_DOMAIN" ]]; then
+        DNS_DOMAIN="techcorp.com"
+    fi
+
+    DNS_IP=$(select_ip "Pilih IP Address untuk DNS Server:")
+    if [[ -z "$DNS_IP" ]]; then
+        log_error "Gagal mendapatkan IP Address untuk DNS."
+        return 1
+    fi
+
+    log_info "Konfigurasi DNS untuk domain $DNS_DOMAIN dengan IP $DNS_IP"
+
+    # Ambil oktet untuk reverse zone
+    IFS='.' read -r o1 o2 o3 o4 <<< "$DNS_IP"
+    REVERSE_ZONE="${o3}.${o2}.${o1}.in-addr.arpa"
+
+    # Configure named.conf.options
+    cat > /etc/bind/named.conf.options << EOF
+options {
+    directory "/var/cache/bind";
+    recursion yes;
+    allow-query { any; };
+    forwarders {
+        8.8.8.8;
+        8.8.4.4;
+    };
+    dnssec-validation auto;
+    listen-on-v6 { any; };
+};
+EOF
+
+    # Configure named.conf.local
+    cat > /etc/bind/named.conf.local << EOF
+zone "$DNS_DOMAIN" {
+    type master;
+    file "/etc/bind/db.$DNS_DOMAIN";
+};
+
+zone "$REVERSE_ZONE" {
+    type master;
+    file "/etc/bind/db.reverse";
+};
+EOF
+
+    # Create Forward Zone File
+    cat > /etc/bind/db.$DNS_DOMAIN << EOF
+;
+; BIND data file for $DNS_DOMAIN
+;
+\$TTL    604800
+@       IN      SOA     ns1.$DNS_DOMAIN. admin.$DNS_DOMAIN. (
+                              3         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@       IN      NS      ns1.$DNS_DOMAIN.
+@       IN      A       $DNS_IP
+ns1     IN      A       $DNS_IP
+www     IN      A       $DNS_IP
+EOF
+
+    # Create Reverse Zone File
+    cat > /etc/bind/db.reverse << EOF
+;
+; BIND reverse data file for $REVERSE_ZONE
+;
+\$TTL    604800
+@       IN      SOA     ns1.$DNS_DOMAIN. admin.$DNS_DOMAIN. (
+                              3         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+@       IN      NS      ns1.$DNS_DOMAIN.
+$o4      IN      PTR     ns1.$DNS_DOMAIN.
+$o4      IN      PTR     www.$DNS_DOMAIN.
+EOF
+
+    log_info "Memeriksa konfigurasi BIND9..."
+    named-checkconf
+    named-checkzone $DNS_DOMAIN /etc/bind/db.$DNS_DOMAIN
+    named-checkzone $REVERSE_ZONE /etc/bind/db.reverse
+
+    log_info "Restarting BIND9..."
+    systemctl restart bind9
+    systemctl enable bind9
+
+    log_info "DNS Server berhasil diinstall dan dikonfigurasi!"
+    log_info "Domain : $DNS_DOMAIN"
+    log_info "IP Address : $DNS_IP"
+}
+
 # Fungsi untuk install WordPress
 install_wordpress() {
     log_step "Menginstall WordPress..."
@@ -404,15 +562,17 @@ SQLEOF
 install_all() {
     log_step "Memulai instalasi semua service..."
     update_system
+    install_dns
     install_apache
     install_ftp
     install_ssh
     install_wordpress
     log_info "Semua service berhasil diinstall!"
-    log_info "Apache: http://localhost"
-    log_info "FTP: ftp://localhost (user: admin, pass: 123)"
-    log_info "SSH: ssh admin@localhost (gunakan private key)"
-    log_info "WordPress: http://localhost/wordpress"
+    log_info "Apache    : http://localhost"
+    log_info "FTP       : ftp://localhost (user: admin, pass: 123)"
+    log_info "SSH       : ssh admin@localhost (gunakan private key)"
+    log_info "DNS       : $DNS_DOMAIN -> $DNS_IP"
+    log_info "WordPress : http://localhost/wordpress"
 }
 
 # Fungsi untuk menampilkan menu utama
@@ -425,10 +585,11 @@ show_menu() {
     echo -e "${CYAN} 2.${NC} Install Apache2 (Web Server)"
     echo -e "${CYAN} 3.${NC} Install FTP (vsftpd)"
     echo -e "${CYAN} 4.${NC} Install SSH (Secure Server)"
-    echo -e "${CYAN} 5.${NC} Install WordPress (Optional)"
-    echo -e "${CYAN} 6.${NC} Exit"
+    echo -e "${CYAN} 5.${NC} Install DNS Server (BIND9)"
+    echo -e "${CYAN} 6.${NC} Install WordPress (Optional)"
+    echo -e "${CYAN} 7.${NC} Exit"
     echo ""
-    echo -ne "${GREEN}Pilih menu (1-6): ${NC}"
+    echo -ne "${GREEN}Pilih menu (1-7): ${NC}"
 }
 
 prompt_menu_choice() {
@@ -467,9 +628,13 @@ while true; do
             ;;
         5)
             echo ""
-            install_wordpress
+            install_dns
             ;;
         6)
+            echo ""
+            install_wordpress
+            ;;
+        7)
             echo ""
             log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
             echo -e "${GREEN}Script by TechCorp - All rights reserved${NC}"
@@ -477,7 +642,7 @@ while true; do
             exit 0
             ;;
         *)
-            log_error "Pilihan tidak valid! Silakan pilih 1-6"
+            log_error "Pilihan tidak valid! Silakan pilih 1-7"
             sleep 2
             ;;
     esac
