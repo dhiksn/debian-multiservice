@@ -63,8 +63,22 @@ show_menu() {
     echo -e "${BOLD}${YELLOW}  ║${NC}  6. Exit                          ${BOLD}${YELLOW}║${NC}"
     echo -e "${BOLD}${YELLOW}  ╚══════════════════════════════════╝${NC}"
     echo ""
-    printf "\033[0;36mPilih opsi [1-6]: \033[0m"
-    read -r CHOICE
+}
+
+prompt_menu_choice() {
+    while true; do
+        printf "\033[0;36mPilih opsi [1-6]: \033[0m"
+        IFS= read -r CHOICE
+
+        case "$CHOICE" in
+            [1-6])
+                return 0
+                ;;
+            *)
+                log_error "Pilihan tidak valid. Masukkan angka 1-6."
+                ;;
+        esac
+    done
 }
 
 # ─── System Update ───────────────────────────────────────────
@@ -431,6 +445,7 @@ main() {
 
     while true; do
         show_menu
+        prompt_menu_choice
         case $CHOICE in
             1)
                 install_all
@@ -455,13 +470,6 @@ main() {
                 echo -e "\n${CYAN}${BOLD}Terima kasih telah menggunakan TechCorp Installer. Sampai jumpa!${NC}\n"
                 tput sgr0
                 exit 0
-                ;;
-            *)
-                log_error "Pilihan tidak valid. Masukkan angka 1-6."
-                sleep 1
-                clear
-                show_banner
-                continue
                 ;;
         esac
 
