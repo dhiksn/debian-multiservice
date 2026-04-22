@@ -63,15 +63,8 @@ show_menu() {
     echo -e "${BOLD}${YELLOW}  ║${NC}  6. Exit                          ${BOLD}${YELLOW}║${NC}"
     echo -e "${BOLD}${YELLOW}  ╚══════════════════════════════════╝${NC}"
     echo ""
-    
-    # Gunakan printf dengan format specifier
-    printf "%sPilih opsi [1-6]: %s" "${CYAN}" "${NC}"
-    read -r CHOICE  # -r untuk mencegah escape karakter
-    
-    # Validasi input
-    if [[ -z "$CHOICE" ]]; then
-        CHOICE=""
-    fi
+    printf "\033[0;36mPilih opsi [1-6]: \033[0m"
+    read -r CHOICE
 }
 
 # ─── System Update ───────────────────────────────────────────
