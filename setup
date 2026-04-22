@@ -16,6 +16,9 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
 
+# ─── Trap: Reset terminal on exit/interrupt ───────────────────
+trap 'tput sgr0; echo ""' EXIT INT TERM
+
 # Fungsi untuk logging
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"

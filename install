@@ -14,6 +14,9 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+# ─── Trap: Reset terminal on exit/interrupt ───────────────────
+trap 'tput sgr0; echo ""' EXIT INT TERM
+
 # ─── Logging Helper ──────────────────────────────────────────
 log_info()    { echo -e "${GREEN}[INFO]${NC}  $1"; }
 log_warn()    { echo -e "${YELLOW}[WARN]${NC}  $1"; }
