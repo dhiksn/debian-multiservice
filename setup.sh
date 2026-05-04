@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 # =====================================================
 # Script: Multi-Service Installer for Debian
@@ -40,7 +40,7 @@ get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
 }
 
-# Fungsi untuk memilih IP Address dari interface yang aktif
+# Fungsi universal untuk memilih IP Address dari interface yang aktif
 select_ip() {
     local prompt_msg="$1"
     local interfaces=()
@@ -465,10 +465,10 @@ install_all() {
     install_ssh
     install_wordpress
     log_info "Semua service berhasil diinstall!"
-    log_info "Apache: http://localhost"
-    log_info "FTP: ftp://localhost (user: admin, pass: 123)"
-    log_info "SSH: ssh admin@localhost (gunakan private key)"
-    log_info "WordPress: http://localhost/wordpress"
+    log_info "Apache    : http://localhost"
+    log_info "FTP       : ftp://localhost (user: admin, pass: 123)"
+    log_info "SSH       : ssh admin@localhost (gunakan private key)"
+    log_info "WordPress : http://localhost/wordpress"
 }
 
 # Fungsi untuk menampilkan menu utama
