@@ -485,15 +485,28 @@ done
 
 '@
 
-# Generate file
-$outputPath = ".\test.sh"
-
-if (Test-Path $outputPath) {
-    Remove-Item $outputPath -Force
+# Fungsi untuk menyimpan file dengan encoding UTF-8 tanpa BOM
+function Write-Utf8NoBomFile {
+    param(
+        [string]$Path,
+        [string]$Content
+    )
+    
+    # Buat UTF8 encoding tanpa BOM
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    
+    # Hapus file jika sudah ada
+    if (Test-Path $Path) {
+        Remove-Item $Path -Force
+    }
+    
+    # Tulis file
+    [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
 }
 
-# Save dengan UTF8
-$setupScriptContent | Out-File -FilePath $outputPath -Encoding UTF8 -NoNewline
+# Generate file test.sh
+$outputPath = ".\test.sh"
+Write-Utf8NoBomFile -Path $outputPath -Content $setupScriptContent
 
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green
@@ -501,7 +514,9 @@ Write-Host "                     SCRIPT BERHASIL DIGENERATE                     
 Write-Host "==========================================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "File: test.sh" -ForegroundColor Cyan
+Write-Host "Location: $((Get-Item $outputPath).DirectoryName)" -ForegroundColor Cyan
 Write-Host "Size: $([math]::Round((Get-Item $outputPath).Length/1KB, 2)) KB" -ForegroundColor Cyan
+Write-Host "Encoding: UTF-8 without BOM" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Yellow
 Write-Host "                         CARA MENGGUNAKAN                                " -ForegroundColor Yellow
@@ -517,4 +532,13 @@ Write-Host ""
 Write-Host "==========================================================================" -ForegroundColor Green
 Write-Host "                         SCRIPT SIAP DIGUNAKAN                           " -ForegroundColor Green
 Write-Host "==========================================================================" -ForegroundColor Green
+Write-Host ""
+
+# Verifikasi encoding
+$bytes = [System.IO.File]::ReadAllBytes($outputPath)
+if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+    Write-Host "PERINGATAN: File masih memiliki BOM!" -ForegroundColor Red
+} else {
+    Write-Host "Verifikasi: File menggunakan UTF-8 tanpa BOM (OK)" -ForegroundColor Green
+}
 Write-Host ""
