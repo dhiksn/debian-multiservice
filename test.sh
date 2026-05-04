@@ -1,18 +1,15 @@
 ﻿#!/bin/bash
 
 # =====================================================
-# Script: TechCorp Server Setup Script
-# Author: TechCorp
-# Description: Network Configuration + Multi-Service Installer
-# Version: 2.0
+# TechCorp Server Setup Script
+# Version: 3.0
 # =====================================================
 
-# Warna untuk tampilan
+# Warna
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 NC='\033[0m'
@@ -21,9 +18,8 @@ BOLD='\033[1m'
 # File konfigurasi
 NETWORK_CONFIG="/etc/network/interfaces"
 DNS_CONFIG="/etc/resolv.conf"
-HOSTS_CONFIG="/etc/hosts"
 
-# Fungsi logging
+# Logging functions
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -32,49 +28,44 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
 log_step() {
     echo -e "${CYAN}[STEP]${NC} $1"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[OK]${NC} $1"
 }
 
-print_separator() {
-    echo -e "${BLUE}------------------------------------------------------------${NC}"
-}
-
-# Fungsi banner yang lebih sederhana dan kompatibel
+# Banner function - simple and clean
 show_banner() {
     clear
     echo -e "${BLUE}${BOLD}"
-    echo ' â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— '
-    echo ' â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—'
-    echo '    â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘'
-    echo '    â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘'
-    echo '    â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•'
-    echo '    â•šâ•â•   â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•     â•šâ•â•â•â•â•â• '
+    echo "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"
+    echo "â•‘                                                              â•‘"
+    echo "â•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—   â•‘"
+    echo "â•‘   â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—  â•‘"
+    echo "â•‘      â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•  â•‘"
+    echo "â•‘      â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•   â•‘"
+    echo "â•‘      â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘       â•‘"
+    echo "â•‘      â•šâ•â•   â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•       â•‘"
+    echo "â•‘                                                              â•‘"
+    echo "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
     echo -e "${NC}"
-    print_separator
     echo -e "${CYAN}${BOLD}     Multi-Service Installer | Apache2 + FTP + SSH + Network Setup${NC}"
-    print_separator
+    echo -e "${BLUE}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
     echo ""
 }
 
-# Cek root
+# Check root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
-        log_error "Script harus dijalankan sebagai root!"
+        echo -e "${RED}[ERROR] Script harus dijalankan sebagai root!${NC}"
         echo -e "${YELLOW}Gunakan: sudo ./test.sh${NC}"
         exit 1
     fi
 }
 
-# Update sistem
+# Update system
 update_system() {
     log_step "Mengupdate sistem..."
     apt update -y
@@ -85,19 +76,21 @@ update_system() {
 }
 
 # =====================================================
-# FUNGSI NETWORK SETUP (IP STATIC)
+# 1. SETUP IP STATIC
 # =====================================================
-
 setup_ip_static() {
     log_step "Konfigurasi IP Static"
     echo ""
     
     echo -e "${YELLOW}Masukkan konfigurasi IP Static:${NC}"
-    echo ""
+    echo -n "   IP Address (contoh: 192.168.1.100): "
+    read ip_address
     
-    read -p "   IP Address (contoh: 192.168.1.100): " ip_address
-    read -p "   Netmask (contoh: 255.255.255.0): " netmask
-    read -p "   Gateway (contoh: 192.168.1.1): " gateway
+    echo -n "   Netmask (contoh: 255.255.255.0): "
+    read netmask
+    
+    echo -n "   Gateway (contoh: 192.168.1.1): "
+    read gateway
     
     if [[ -z "$ip_address" || -z "$netmask" || -z "$gateway" ]]; then
         log_error "Semua field harus diisi!"
@@ -112,9 +105,8 @@ setup_ip_static() {
     if [[ -z "$main_interface" ]]; then
         main_interface="eth0"
     fi
-    log_info "Menggunakan interface: $main_interface"
     
-    # Konfigurasi static IP
+    # Konfigurasi
     cat > $NETWORK_CONFIG << EOF
 auto lo
 iface lo inet loopback
@@ -127,41 +119,41 @@ iface $main_interface inet static
 EOF
     
     systemctl restart networking
-    
-    log_success "IP Static berhasil dikonfigurasi!"
-    echo -e "   ${CYAN}IP Address:${NC} $ip_address"
-    echo -e "   ${CYAN}Gateway:${NC} $gateway"
+    log_success "IP Static berhasil dikonfigurasi"
+    echo -e "   ${CYAN}IP:${NC} $ip_address | ${CYAN}Gateway:${NC} $gateway"
 }
 
 # =====================================================
-# FUNGSI DNS SERVER
+# 2. SETUP DNS SERVER
 # =====================================================
-
 setup_dns() {
     log_step "Konfigurasi DNS Server"
     echo ""
     
-    echo -e "${YELLOW}Pilih opsi DNS:${NC}"
-    echo "   1. Gunakan DNS Public (Google: 8.8.8.8, 8.8.4.4)"
-    echo "   2. Gunakan DNS Cloudflare (1.1.1.1, 1.0.0.1)"
-    echo "   3. Masukkan DNS manual"
+    echo -e "${YELLOW}Pilih DNS Server:${NC}"
+    echo "   1. Google DNS (8.8.8.8, 8.8.4.4)"
+    echo "   2. Cloudflare DNS (1.1.1.1, 1.0.0.1)"
+    echo "   3. Custom DNS"
     echo ""
-    read -p "Pilih [1-3]: " dns_choice
+    echo -n "Pilih [1-3]: "
+    read dns_choice
     
     case $dns_choice in
         1)
             dns1="8.8.8.8"
             dns2="8.8.4.4"
-            log_info "Menggunakan DNS Google"
+            log_info "Menggunakan Google DNS"
             ;;
         2)
             dns1="1.1.1.1"
             dns2="1.0.0.1"
-            log_info "Menggunakan DNS Cloudflare"
+            log_info "Menggunakan Cloudflare DNS"
             ;;
         3)
-            read -p "   DNS Primary: " dns1
-            read -p "   DNS Secondary: " dns2
+            echo -n "   DNS Primary: "
+            read dns1
+            echo -n "   DNS Secondary: "
+            read dns2
             ;;
         *)
             dns1="8.8.8.8"
@@ -169,32 +161,24 @@ setup_dns() {
             ;;
     esac
     
-    # Backup
+    # Backup dan konfigurasi
     cp $DNS_CONFIG ${DNS_CONFIG}.backup 2>/dev/null
-    
-    # Konfigurasi DNS
     cat > $DNS_CONFIG << EOF
 nameserver $dns1
 nameserver $dns2
 EOF
     
-    # Update /etc/hosts
-    echo -e "\n# TechCorp DNS Configuration" >> $HOSTS_CONFIG
-    
-    log_success "DNS Server berhasil dikonfigurasi!"
-    echo -e "   ${CYAN}DNS Primary:${NC} $dns1"
-    echo -e "   ${CYAN}DNS Secondary:${NC} $dns2"
+    log_success "DNS Server berhasil dikonfigurasi"
+    echo -e "   ${CYAN}DNS Primary:${NC} $dns1 | ${CYAN}DNS Secondary:${NC} $dns2"
 }
 
 # =====================================================
-# FUNGSI APACHE2
+# 3. INSTALL APACHE2
 # =====================================================
-
 install_apache() {
     log_step "Menginstall Apache2 Web Server..."
     
     apt install apache2 -y
-    
     systemctl enable apache2
     systemctl start apache2
     
@@ -205,164 +189,86 @@ install_apache() {
         return 1
     fi
     
-    # Dapatkan IP address
     current_ip=$(ip route get 1 | awk '{print $NF;exit}' 2>/dev/null)
-    if [[ -z "$current_ip" ]]; then
-        current_ip="localhost"
-    fi
+    [[ -z "$current_ip" ]] && current_ip="localhost"
     
-    # Halaman web
-    cat > /var/www/html/index.html << 'HTMLEOF'
+    # Halaman web sederhana
+    cat > /var/www/html/index.html << 'EOF'
 <!DOCTYPE html>
-<html lang="id">
+<html>
 <head>
+    <title>TechCorp Indonesia</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TechCorp - Solusi Teknologi Terpercaya</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 60px 40px;
-            text-align: center;
-            border-radius: 15px;
-            margin-bottom: 30px;
-        }
-        .header h1 { font-size: 3.5em; margin-bottom: 10px; }
-        .company-desc {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-        }
-        .company-desc h2 { color: #667eea; margin-bottom: 20px; }
-        .services {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 25px;
-            margin-bottom: 30px;
-        }
-        .service-card {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            text-align: center;
-            transition: transform 0.3s;
-        }
-        .service-card:hover { transform: translateY(-10px); }
-        .service-card h3 { color: #667eea; margin: 15px 0; }
-        .contact {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 40px;
-            border-radius: 15px;
-            text-align: center;
-        }
-        .contact-info {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            flex-wrap: wrap;
-            margin-top: 20px;
-        }
-        .contact-item {
-            background: white;
-            padding: 15px 25px;
-            border-radius: 10px;
-        }
-        footer {
-            text-align: center;
-            padding: 30px;
-            color: white;
-        }
-        @media (max-width: 768px) {
-            .header h1 { font-size: 2em; }
-        }
+        body { font-family: Arial; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .container { max-width: 1000px; margin: 50px auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; text-align: center; }
+        .header h1 { margin: 0; font-size: 2.5em; }
+        .content { padding: 40px; }
+        .services { display: flex; gap: 20px; margin: 30px 0; flex-wrap: wrap; }
+        .service { flex: 1; background: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; }
+        .service h3 { color: #667eea; }
+        .contact { background: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin-top: 20px; }
+        footer { background: #333; color: white; text-align: center; padding: 15px; }
+        @media (max-width: 600px) { .services { flex-direction: column; } }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>TechCorp Indonesia</h1>
-            <p>Inovasi Teknologi untuk Masa Depan yang Lebih Baik</p>
+            <p>Solusi Teknologi untuk Masa Depan</p>
         </div>
-        
-        <div class="company-desc">
+        <div class="content">
             <h2>Tentang TechCorp</h2>
-            <p>
-                TechCorp adalah perusahaan teknologi terkemuka di Indonesia yang berdedikasi untuk 
-                memberikan solusi digital terbaik bagi bisnis Anda. Dengan pengalaman lebih dari 
-                satu dekade, kami telah membantu ribuan klien dalam mentransformasi ide-ide brilian 
-                menjadi realitas digital yang mengesankan.
-            </p>
-        </div>
-        
-        <h2 style="text-align: center; color: white; margin-bottom: 20px;">Layanan Unggulan Kami</h2>
-        <div class="services">
-            <div class="service-card">
-                <div class="service-icon" style="font-size: 3em;">Web Dev</div>
-                <h3>Web Development</h3>
-                <p>Pengembangan website modern, responsif, dan scalable menggunakan teknologi terkini.</p>
+            <p>TechCorp adalah perusahaan teknologi terkemuka yang menyediakan solusi digital inovatif untuk bisnis modern.</p>
+            
+            <div class="services">
+                <div class="service">
+                    <h3>Web Development</h3>
+                    <p>Pengembangan website modern dan responsif</p>
+                </div>
+                <div class="service">
+                    <h3>Network Engineering</h3>
+                    <p>Infrastruktur jaringan yang handal</p>
+                </div>
+                <div class="service">
+                    <h3>Cybersecurity</h3>
+                    <p>Perlindungan aset digital Anda</p>
+                </div>
             </div>
-            <div class="service-card">
-                <div class="service-icon" style="font-size: 3em;">Network</div>
-                <h3>Network Engineering</h3>
-                <p>Desain dan implementasi infrastruktur jaringan yang handal dan aman.</p>
-            </div>
-            <div class="service-card">
-                <div class="service-icon" style="font-size: 3em;">Security</div>
-                <h3>Cybersecurity</h3>
-                <p>Solusi keamanan siber komprehensif melindungi aset digital Anda.</p>
+            
+            <div class="contact">
+                <h3>Hubungi Kami</h3>
+                <p>Email: info@techcorp.co.id | Telp: (021) 1234-5678</p>
+                <p>Jl. Teknologi No. 123, Jakarta Selatan</p>
             </div>
         </div>
-        
-        <div class="contact">
-            <h3>Hubungi Kami</h3>
-            <div class="contact-info">
-                <div class="contact-item">Email: info@techcorp.co.id</div>
-                <div class="contact-item">Telp: (021) 1234-5678</div>
-                <div class="contact-item">Alamat: Jl. Teknologi No. 123, Jakarta Selatan</div>
-            </div>
-        </div>
-        
         <footer>
-            <p>&copy; 2024 TechCorp Indonesia. All rights reserved.</p>
-            <p style="font-size: 0.9em; margin-top: 10px;">Powered by Apache2 on Debian Server</p>
+            <p>&copy; 2024 TechCorp Indonesia - Powered by Apache2</p>
         </footer>
     </div>
 </body>
 </html>
-HTMLEOF
+EOF
     
     chown -R www-data:www-data /var/www/html/
     chmod -R 755 /var/www/html/
     
-    log_success "Apache2 berhasil diinstall!"
-    log_info "Website: http://$current_ip"
+    log_success "Apache2 selesai"
+    log_info "Akses: http://$current_ip"
 }
 
 # =====================================================
-# FUNGSI FTP (vsftpd)
+# 4. INSTALL FTP (vsftpd)
 # =====================================================
-
 install_ftp() {
     log_step "Menginstall vsftpd FTP Server..."
     
     apt install vsftpd -y
-    
     cp /etc/vsftpd.conf /etc/vsftpd.conf.backup 2>/dev/null
     
-    cat > /etc/vsftpd.conf << 'FTPEOF'
+    cat > /etc/vsftpd.conf << 'EOF'
 listen=YES
 listen_ipv6=NO
 anonymous_enable=NO
@@ -378,75 +284,57 @@ allow_writeable_chroot=YES
 pasv_enable=YES
 pasv_min_port=30000
 pasv_max_port=31000
-ftpd_banner=Welcome to TechCorp FTP Service!
-FTPEOF
+ftpd_banner=Welcome to TechCorp FTP
+EOF
     
-    # Buat user admin
-    if id "admin" &>/dev/null; then
-        log_warning "User admin sudah ada"
-    else
+    if ! id "admin" &>/dev/null; then
         useradd -m -s /bin/bash admin
-        log_info "User admin berhasil dibuat"
     fi
-    
     echo "admin:123" | chpasswd
     chmod 755 /home/admin
     
     systemctl restart vsftpd
     systemctl enable vsftpd
     
-    # Dapatkan IP
     current_ip=$(ip route get 1 | awk '{print $NF;exit}' 2>/dev/null)
-    if [[ -z "$current_ip" ]]; then
-        current_ip="localhost"
-    fi
+    [[ -z "$current_ip" ]] && current_ip="localhost"
     
-    log_success "FTP Server berhasil diinstall!"
-    echo -e "   ${CYAN}Server:${NC} ftp://$current_ip"
-    echo -e "   ${CYAN}Username:${NC} admin"
-    echo -e "   ${CYAN}Password:${NC} 123"
+    log_success "FTP Server selesai"
+    log_info "Server: ftp://$current_ip | User: admin | Pass: 123"
 }
 
 # =====================================================
-# FUNGSI SSH SERVER
+# 5. INSTALL SSH
 # =====================================================
-
 install_ssh() {
-    log_step "Menginstall OpenSSH Server dengan konfigurasi hardening..."
+    log_step "Menginstall OpenSSH Server..."
     
     apt install openssh-server -y
-    
     cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup 2>/dev/null
     
-    cat > /etc/ssh/sshd_config << 'SSHEOF'
+    cat > /etc/ssh/sshd_config << 'EOF'
 Port 22
 Protocol 2
 PermitRootLogin no
 PubkeyAuthentication yes
 PasswordAuthentication no
 PermitEmptyPasswords no
-ChallengeResponseAuthentication no
-AuthenticationMethods publickey
 MaxAuthTries 3
 ClientAliveInterval 300
-ClientAliveCountMax 2
 AllowUsers admin
 Subsystem sftp /usr/lib/openssh/sftp-server
-SSHEOF
+EOF
     
-    # Buat user admin jika belum ada
     if ! id "admin" &>/dev/null; then
         useradd -m -s /bin/bash admin
         echo "admin:123" | chpasswd
     fi
     
-    # Setup SSH keys
     mkdir -p /home/admin/.ssh
     chmod 700 /home/admin/.ssh
     
     if [[ ! -f /home/admin/.ssh/id_rsa ]]; then
-        ssh-keygen -t rsa -b 4096 -f /home/admin/.ssh/id_rsa -N "" -C "techcorp-admin"
-        log_info "SSH key pair generated"
+        ssh-keygen -t rsa -b 4096 -f /home/admin/.ssh/id_rsa -N "" -C "techcorp"
     fi
     
     cp /home/admin/.ssh/id_rsa.pub /home/admin/.ssh/authorized_keys
@@ -456,23 +344,19 @@ SSHEOF
     systemctl restart sshd
     systemctl enable sshd
     
-    # Dapatkan IP
     current_ip=$(ip route get 1 | awk '{print $NF;exit}' 2>/dev/null)
     
-    log_success "SSH Server berhasil diinstall!"
-    echo -e "   ${CYAN}Server:${NC} ssh://$current_ip:22"
-    echo -e "   ${CYAN}Username:${NC} admin"
-    echo -e "   ${CYAN}Private Key:${NC} /home/admin/.ssh/id_rsa"
-    echo -e "   ${YELLOW}IMPORTANT: Password authentication DISABLED${NC}"
+    log_success "SSH Server selesai"
+    log_info "User: admin | Private key: /home/admin/.ssh/id_rsa"
+    log_warning "Password authentication telah DINONAKTIFKAN"
 }
 
 # =====================================================
-# FUNGSI INSTALL SEMUA
+# 6. INSTALL SEMUA
 # =====================================================
-
 install_all() {
     log_step "Instalasi semua service..."
-    print_separator
+    echo ""
     
     update_system
     echo ""
@@ -492,35 +376,27 @@ install_all() {
     install_ssh
     echo ""
     
-    print_separator
-    log_success "Semua service berhasil diinstall!"
-    print_separator
-    
     current_ip=$(ip route get 1 | awk '{print $NF;exit}' 2>/dev/null)
+    
     echo ""
-    echo -e "${GREEN}${BOLD}============================================================${NC}"
-    echo -e "${GREEN}${BOLD}                   INFORMASI SERVICE                       ${NC}"
-    echo -e "${GREEN}${BOLD}============================================================${NC}"
+    echo -e "${GREEN}${BOLD}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+    echo -e "${GREEN}${BOLD}                    INSTALLASI SELESAI                       ${NC}"
+    echo -e "${GREEN}${BOLD}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
     echo ""
-    echo -e "${CYAN}Web Server:${NC} http://$current_ip"
-    echo -e "${CYAN}FTP Server:${NC} ftp://$current_ip (admin:123)"
-    echo -e "${CYAN}SSH Server:${NC} ssh://$current_ip:22 (key-based)"
-    echo ""
-    echo -e "${YELLOW}Credential:${NC}"
-    echo -e "  - FTP: admin / 123"
-    echo -e "  - SSH Private Key: /home/admin/.ssh/id_rsa"
+    echo -e "${CYAN}Web:${NC} http://$current_ip"
+    echo -e "${CYAN}FTP:${NC} ftp://$current_ip (admin/123)"
+    echo -e "${CYAN}SSH:${NC} ssh://$current_ip (key-based)"
     echo ""
 }
 
 # =====================================================
-# FUNGSI MENU UTAMA
+# MENU UTAMA
 # =====================================================
-
 show_menu() {
     echo ""
-    print_separator
-    echo -e "${YELLOW}${BOLD}                      MENU UTAMA                         ${NC}"
-    print_separator
+    echo -e "${YELLOW}${BOLD}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${NC}"
+    echo -e "${YELLOW}${BOLD}â•‘                       MENU UTAMA                         â•‘${NC}"
+    echo -e "${YELLOW}${BOLD}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
     echo ""
     echo -e "  ${CYAN}1.${NC} Setup IP Static"
     echo -e "  ${CYAN}2.${NC} Setup DNS Server"
@@ -530,32 +406,31 @@ show_menu() {
     echo -e "  ${CYAN}6.${NC} Install Semua Service"
     echo -e "  ${CYAN}7.${NC} Exit"
     echo ""
-    print_separator
-    echo -ne "${GREEN}Pilih menu [1-7]: ${NC}"
+    echo -e "${BLUE}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+    echo -n -e "${GREEN}Pilih menu [1-7]: ${NC}"
 }
 
 # =====================================================
-# MAIN PROGRAM
+# MAIN
 # =====================================================
-
 check_root
 
 while true; do
     show_banner
     
-    # Tampilkan IP saat ini
-    current_ip=$(ip route get 1 | awk '{print $NF;exit}' 2>/dev/null)
+    # Tampilkan IP
+    current_ip=$(ip route get 1 2>/dev/null | awk '{print $NF;exit}')
     if [[ -n "$current_ip" ]]; then
         echo -e "   ${WHITE}Current IP Address:${NC} ${GREEN}$current_ip${NC}"
     else
-        echo -e "   ${WHITE}Current IP Address:${NC} ${RED}Not configured${NC}"
+        echo -e "   ${WHITE}Current IP Address:${NC} ${RED}Not Set${NC}"
     fi
     echo ""
     
     show_menu
     read choice
     
-    case $choice in
+    case "$choice" in
         1)
             echo ""
             setup_ip_static
@@ -588,17 +463,18 @@ while true; do
             ;;
         7)
             echo ""
-            echo -e "${GREEN}Terima kasih telah menggunakan TechCorp Server Setup Script!${NC}"
+            echo -e "${GREEN}Terima kasih menggunakan TechCorp Setup Script!${NC}"
             echo -e "${CYAN}TechCorp - Solusi Teknologi Terpercaya${NC}"
             echo ""
             exit 0
             ;;
         *)
-            log_error "Pilihan tidak valid! Silakan pilih 1-7"
+            echo -e "${RED}[ERROR] Pilihan tidak valid! Silakan pilih 1-7${NC}"
             sleep 2
             ;;
     esac
     
     echo ""
-    read -p "Tekan Enter untuk kembali ke menu utama..."
+    echo -n "Tekan Enter untuk kembali ke menu utama..."
+    read dummy
 done
