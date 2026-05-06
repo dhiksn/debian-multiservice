@@ -1,9 +1,9 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 # =====================================================
 # Script: Multi-Service Installer for Debian
 # Author: TechCorp
-# Description: Install and configure Apache2, vsftpd, OpenSSH, BIND9 and WordPress
+# Description: Install and configure Apache2, vsftpd, OpenSSH, DNS Server, and WordPress
 # =====================================================
 
 # Warna untuk tampilan
@@ -16,8 +16,10 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-# ─── Trap: Reset terminal on exit/interrupt ───────────────────
-trap 'tput sgr0; echo ""' EXIT INT TERM
+# Variabel global
+APACHE_ACCESS_IP=""
+DNS_FORWARDERS="8.8.8.8; 8.8.4.4;"
+DOMAIN_NAME=""
 
 # Fungsi untuk logging
 log_info() {
@@ -36,78 +38,89 @@ log_step() {
     echo -e "${CYAN}[STEP]${NC} $1"
 }
 
+# Fungsi untuk mendapatkan daftar interface dan IP
+get_interfaces() {
+    ip -o -4 addr show up scope global | awk '{print $2 "|" $4}'
+}
+
+# Fungsi untuk memilih IP dari interface
+choose_ip() {
+    local service_name=$1
+    local interfaces=()
+    local idx=1
+    local choice=""
+    
+    while IFS= read -r line; do
+        interfaces+=("$line")
+    done < <(get_interfaces)
+    
+    if [[ ${#interfaces[@]} -eq 0 ]]; then
+        echo "$(hostname -I | awk '{print $1}')"
+        return 0
+    fi
+    
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}Pilih IP Address untuk $service_name:${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    for line in "${interfaces[@]}"; do
+        local iface="${line%%|*}"
+        local ip_addr="${line##*|}"
+        ip_addr="${ip_addr%%/*}"
+        echo -e "  ${YELLOW}${idx}.${NC} $iface -> $ip_addr"
+        idx=$((idx + 1))
+    done
+    
+    while true; do
+        echo -ne "${GREEN}Pilih interface [1-${#interfaces[@]}] (default 1): ${NC}"
+        if ! IFS= read -r choice < /dev/tty; then
+            choice=""
+        fi
+        
+        if [[ -z "$choice" ]]; then
+            choice=1
+        fi
+        
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
+            local selected="${interfaces[$((choice - 1))]}"
+            local selected_ip="${selected##*|}"
+            echo "${selected_ip%%/*}"
+            return 0
+        fi
+        
+        log_error "Pilihan tidak valid."
+    done
+}
+
+# Fungsi untuk mengecek port 80
 get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
 }
 
-# Fungsi universal untuk memilih IP Address dari interface yang aktif
-select_ip() {
-    local prompt_msg="$1"
-    local interfaces=()
-    local line=""
-    local idx=1
-    local choice=""
-    local selected_if=""
-    local selected_ip=""
-
-    while IFS= read -r line; do
-        interfaces+=("$line")
-    done < <(ip -o -4 addr show up scope global | awk '{print $2 "|" $4}')
-
-    if [[ ${#interfaces[@]} -eq 0 ]]; then
-        selected_ip="$(hostname -I | awk '{print $1}')"
-        echo "$selected_ip"
-        return 0
-    fi
-
-    echo -e "${CYAN}${prompt_msg}${NC}" >&2
-    for line in "${interfaces[@]}"; do
-        echo -e "  ${YELLOW}${idx}.${NC} ${line%%|*} -> ${line##*|}" >&2
-        idx=$((idx + 1))
-    done
-
-    while true; do
-        printf "\033[0;36m%s [1-%d] (default 1): \033[0m" "Pilih interface" "${#interfaces[@]}" >&2
-        if ! IFS= read -r choice < /dev/tty; then
-            echo "" >&2
-            return 1
-        fi
-
-        if [[ -z "$choice" ]]; then
-            choice=1
-        fi
-
-        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
-            selected_if="${interfaces[$((choice - 1))]}"
-            selected_ip="${selected_if##*|}"
-            selected_ip="${selected_ip%%/*}"
-            echo "$selected_ip"
-            return 0
-        fi
-
-        log_error "Pilihan interface tidak valid." >&2
-    done
-}
-
-choose_access_ip() {
-    APACHE_ACCESS_IP=$(select_ip "Pilih interface untuk akses Apache2:")
-    [[ -n "$APACHE_ACCESS_IP" ]]
-}
-
 # Fungsi untuk menampilkan banner
 show_banner() {
+    clear
     echo -e "${BLUE}${BOLD}"
     cat << "EOF"
- ████████╗███████╗ ██████╗██╗  ██╗ ██████╗ ██████╗ ██████╗ ██████╗ 
- ╚══██╔══╝██╔════╝██╔════╝██║  ██║██╔════╝██╔═══██╗██╔══██╗██╔══██╗
-    ██║   █████╗  ██║     ███████║██║     ██║   ██║██████╔╝██████╔╝
-    ██║   ██╔══╝  ██║     ██╔══██║██║     ██║   ██║██╔══██╗██╔═══╝ 
-    ██║   ███████╗╚██████╗██║  ██║╚██████╗╚██████╔╝██║  ██║██║ 
-    ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝
+================================================================================
+   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— 
+   â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—
+      â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•
+      â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â• 
+      â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     
+      â•šâ•â•   â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â• â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•     
+                                                                     
+   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— 
+  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—
+  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘
+  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘
+  â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•
+   â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•â•â•â•â• 
+================================================================================
 EOF
     echo -e "${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
-    echo -e "${YELLOW}${BOLD}     Multi-Service Installer | Apache2 + vsftpd + OpenSSH${NC}"
+    echo -e "${YELLOW}${BOLD}     Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
     echo ""
 }
@@ -133,8 +146,23 @@ update_system() {
 # Fungsi untuk install Apache2
 install_apache() {
     log_step "Menginstall Apache2 Web Server..."
+    
+    # Cek apakah Apache sudah terinstall
+    if systemctl is-active --quiet apache2 2>/dev/null; then
+        log_warning "Apache2 sudah terinstall dan berjalan"
+        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Melewati instalasi Apache2"
+            return 0
+        fi
+    fi
+    
     apt install apache2 -y
-
+    
+    # Pilih IP untuk Apache
+    APACHE_ACCESS_IP=$(choose_ip "Apache2 Web Server")
+    
     log_info "Membuat halaman web custom..."
     cat > /var/www/html/index.html << 'HTMLEOF'
 <!DOCTYPE html>
@@ -232,7 +260,7 @@ install_apache() {
 <body>
     <div class="container">
         <div class="header">
-            <h1>TechCorp</h1>
+            <h1>ðŸ¢ TechCorp</h1>
             <p>Solusi Teknologi Inovatif untuk Masa Depan</p>
         </div>
         <div class="content">
@@ -246,28 +274,29 @@ install_apache() {
             <h2>Layanan Kami</h2>
             <div class="services">
                 <div class="service-card">
-                    <h3>Web Development</h3>
+                    <h3>ðŸ’» Web Development</h3>
                     <p>Membangun website modern, responsif, dan scalable dengan teknologi terbaru.</p>
                 </div>
                 <div class="service-card">
-                    <h3>Cybersecurity</h3>
+                    <h3>ðŸ”’ Cybersecurity</h3>
                     <p>Perlindungan sistem dan data dari ancaman siber dengan solusi keamanan terbaik.</p>
                 </div>
                 <div class="service-card">
-                    <h3>Network Solutions</h3>
+                    <h3>ðŸŒ Network Solutions</h3>
                     <p>Infrastruktur jaringan yang handal dan aman untuk mendukung operasional bisnis.</p>
                 </div>
             </div>
             
             <div class="contact">
-                <h3>Hubungi Kami</h3>
+                <h3>ðŸ“ž Hubungi Kami</h3>
                 <p>Email: info@techcorp.com</p>
                 <p>Telepon: (021) 1234-5678</p>
                 <p>Alamat: Jl. Teknologi No. 123, Jakarta Selatan</p>
+                <p>DNS Server: ns1.techcorp.local</p>
             </div>
         </div>
         <footer>
-            <p>&copy; 2024 TechCorp. All rights reserved. | Powered by Apache2 on Debian</p>
+            <p>&copy; 2025 TechCorp. All rights reserved. | Powered by Apache2 on Debian</p>
         </footer>
     </div>
 </body>
@@ -276,46 +305,35 @@ HTMLEOF
     
     chown -R www-data:www-data /var/www/html/
     chmod -R 755 /var/www/html/
-
-    log_info "Mengatur ServerName Apache2..."
-    SERVER_NAME="$(hostname -f 2>/dev/null || hostname)"
-    if [[ -z "$SERVER_NAME" || "$SERVER_NAME" == "(none)" ]]; then
-        SERVER_NAME="localhost"
-    fi
-    cat > /etc/apache2/conf-available/servername.conf << APACHECONF
-ServerName $SERVER_NAME
+    
+    # Konfigurasi virtual host dengan IP spesifik
+    cat > /etc/apache2/sites-available/000-default.conf << APACHECONF
+<VirtualHost $APACHE_ACCESS_IP:80>
+    ServerAdmin webmaster@localhost
+    ServerName ${APACHE_ACCESS_IP}
+    DocumentRoot /var/www/html
+    
+    <Directory /var/www/html>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
 APACHECONF
-    a2enconf servername >/dev/null 2>&1 || true
-
-    log_info "Memvalidasi konfigurasi Apache2..."
-    if ! apache2ctl configtest; then
-        log_error "Konfigurasi Apache2 tidak valid. Periksa output configtest di atas."
-        return 1
-    fi
-
-    log_info "Menjalankan dan mengaktifkan service Apache2..."
-    if ! systemctl enable apache2; then
-        log_error "Gagal mengaktifkan service Apache2."
-        return 1
-    fi
+    
+    # Cek port 80
     PORT_80_LISTENER="$(get_port_80_listener)"
     if [[ -n "$PORT_80_LISTENER" && "$PORT_80_LISTENER" != *"apache2"* ]]; then
         log_error "Port 80 sudah dipakai proses lain: $PORT_80_LISTENER"
-        if [[ "$PORT_80_LISTENER" == *"docker-proxy"* ]]; then
-            log_warning "Terdeteksi Docker memakai port 80. Stop container yang publish port 80 atau pindahkan Apache ke port lain."
-        fi
         return 1
     fi
-    if ! systemctl restart apache2; then
-        log_error "Apache2 gagal dijalankan. Coba cek: systemctl status apache2 --no-pager && journalctl -xeu apache2.service"
-        systemctl status apache2 --no-pager || true
-        return 1
-    fi
-
-    choose_access_ip || return 1
-
-    log_info "Status Apache2:"
-    systemctl status apache2 --no-pager | head -5
+    
+    systemctl enable apache2
+    systemctl restart apache2
+    
     log_info "Apache2 berhasil diinstall dan berjalan di port 80"
     log_info "Apache2 dapat diakses di: http://${APACHE_ACCESS_IP}"
 }
@@ -323,6 +341,17 @@ APACHECONF
 # Fungsi untuk install vsftpd
 install_ftp() {
     log_step "Menginstall vsftpd FTP Server..."
+    
+    if systemctl is-active --quiet vsftpd 2>/dev/null; then
+        log_warning "vsftpd sudah terinstall dan berjalan"
+        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Melewati instalasi vsftpd"
+            return 0
+        fi
+    fi
+    
     apt install vsftpd -y
     
     cp /etc/vsftpd.conf /etc/vsftpd.conf.bak
@@ -350,22 +379,37 @@ pasv_max_port=31000
 allow_writeable_chroot=YES
 FTPEOF
     
-    log_info "Membuat user admin untuk FTP..."
-    useradd -m -s /bin/bash admin
-    echo "admin:123" | chpasswd
+    # Cek apakah user admin sudah ada
+    if id "admin" &>/dev/null; then
+        log_warning "User admin sudah ada"
+        read -p "Reset password admin? (y/n): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "admin:123" | chpasswd
+            log_info "Password admin direset menjadi 123"
+        fi
+    else
+        log_info "Membuat user admin untuk FTP..."
+        useradd -m -s /bin/bash admin
+        echo "admin:123" | chpasswd
+    fi
     
     chmod 755 /home/admin
     
     systemctl restart vsftpd
     systemctl enable vsftpd
     
+    FTP_IP=$(choose_ip "FTP Server")
+    
     log_info "vsftpd berhasil dikonfigurasi"
+    log_info "FTP Server: ftp://${FTP_IP}"
     log_info "User FTP: admin, Password: 123"
 }
 
 # Fungsi untuk install SSH Server
 install_ssh() {
     log_step "Menginstall dan mengkonfigurasi OpenSSH Server..."
+    
     apt install openssh-server -y
     
     cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
@@ -397,8 +441,10 @@ SSHEOF
     mkdir -p /home/admin/.ssh
     chmod 700 /home/admin/.ssh
     
-    log_info "Membuat contoh SSH key pair..."
-    ssh-keygen -t rsa -b 4096 -f /home/admin/.ssh/id_rsa -N "" -C "admin@techcorp"
+    if [[ ! -f /home/admin/.ssh/id_rsa ]]; then
+        log_info "Membuat contoh SSH key pair..."
+        ssh-keygen -t rsa -b 4096 -f /home/admin/.ssh/id_rsa -N "" -C "admin@techcorp"
+    fi
     
     cp /home/admin/.ssh/id_rsa.pub /home/admin/.ssh/authorized_keys
     chmod 600 /home/admin/.ssh/authorized_keys
@@ -408,14 +454,240 @@ SSHEOF
     systemctl restart sshd
     systemctl enable sshd
     
+    SSH_IP=$(choose_ip "SSH Server")
+    
     log_info "SSH Server berhasil dikonfigurasi dengan key-based authentication"
     log_warning "Password authentication telah dinonaktifkan"
+    log_info "SSH Server: ssh admin@${SSH_IP}"
     log_info "Private key disimpan di: /home/admin/.ssh/id_rsa"
+}
+
+# Fungsi untuk install DNS Server (Bind9)
+install_dns() {
+    log_step "Menginstall DNS Server (Bind9)..."
+    
+    if systemctl is-active --quiet bind9 2>/dev/null; then
+        log_warning "Bind9 sudah terinstall dan berjalan"
+        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Melewati instalasi DNS Server"
+            return 0
+        fi
+    fi
+    
+    apt install bind9 bind9utils bind9-doc dnsutils -y
+    
+    # Pilih IP untuk DNS Server
+    DNS_IP=$(choose_ip "DNS Server")
+    
+    # Input domain name
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}Masukkan nama domain yang diinginkan${NC}"
+    echo -e "${CYAN}Contoh: techcorp.local, mycompany.com${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo -ne "${GREEN}Domain name: ${NC}"
+    read -p "" DOMAIN_NAME
+    
+    if [[ -z "$DOMAIN_NAME" ]]; then
+        DOMAIN_NAME="techcorp.local"
+        log_info "Menggunakan domain default: $DOMAIN_NAME"
+    fi
+    
+    # Input forwarders
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}Masukkan DNS Forwarders (DNS upstream)${NC}"
+    echo -e "${CYAN}Default: 8.8.8.8 8.8.4.4 (Google DNS)${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo -ne "${GREEN}Forwarders (pisahkan dengan spasi): ${NC}"
+    read -p "" FORWARDERS_INPUT
+    
+    if [[ -n "$FORWARDERS_INPUT" ]]; then
+        DNS_FORWARDERS=""
+        for fwd in $FORWARDERS_INPUT; do
+            DNS_FORWARDERS="${DNS_FORWARDERS} ${fwd};"
+        done
+    fi
+    
+    # Konfigurasi named.conf.options
+    cat > /etc/bind/named.conf.options << OPTIONSEOF
+options {
+    directory "/var/cache/bind";
+    
+    // Forwarders
+    forwarders {
+        $DNS_FORWARDERS
+    };
+    
+    // Allow queries from local network
+    allow-query { any; };
+    
+    // Recursion
+    recursion yes;
+    
+    // DNSSEC
+    dnssec-validation auto;
+    
+    // Listen on specific IP
+    listen-on { $DNS_IP; 127.0.0.1; };
+    listen-on-v6 { none; };
+    
+    // Versi information
+    version "DNS Server TechCorp";
+    
+    // Rate limiting
+    rate-limit {
+        responses-per-second 10;
+        slip 2;
+    };
+};
+OPTIONSEOF
+    
+    # Konfigurasi named.conf.local
+    cat > /etc/bind/named.conf.local << LOCALSEOF
+// Zone forward untuk $DOMAIN_NAME
+zone "$DOMAIN_NAME" {
+    type master;
+    file "/etc/bind/db.$DOMAIN_NAME";
+    allow-update { none; };
+};
+
+// Zone reverse untuk $DOMAIN_NAME
+REVERSE_IP=\$(echo $DNS_IP | awk -F. '{print \$3"."\$2"."\$1}')
+zone "\${REVERSE_IP}.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.reverse";
+    allow-update { none; };
+};
+LOCALSEOF
+    
+    # Buat forward zone file
+    SERIAL=$(date +%Y%m%d%S)
+    cat > /etc/bind/db.$DOMAIN_NAME << FORWARDEOF
+;
+; BIND data file for $DOMAIN_NAME
+;
+\$TTL    604800
+@       IN      SOA     ns1.$DOMAIN_NAME. admin.$DOMAIN_NAME. (
+                    $SERIAL     ; Serial
+                    604800      ; Refresh
+                    86400       ; Retry
+                    2419200     ; Expire
+                    604800 )    ; Negative Cache TTL
+;
+@       IN      NS      ns1.$DOMAIN_NAME.
+@       IN      A       $DNS_IP
+@       IN      MX 10   mail.$DOMAIN_NAME.
+
+; Name Servers
+ns1     IN      A       $DNS_IP
+ns2     IN      A       $DNS_IP
+
+; Web Server
+www     IN      A       $DNS_IP
+web     IN      A       $DNS_IP
+
+; FTP Server
+ftp     IN      A       $DNS_IP
+
+; Mail Server
+mail    IN      A       $DNS_IP
+
+; SSH
+ssh     IN      A       $DNS_IP
+
+; WordPress
+wp      IN      A       $DNS_IP
+wordpress IN    A       $DNS_IP
+
+; CNAME records
+files   IN      CNAME   www
+dev     IN      CNAME   www
+FORWARDEOF
+    
+    # Buat reverse zone file
+    REVERSE_IP=$(echo $DNS_IP | awk -F. '{print $3"."$2"."$1}')
+    LAST_OCTET=$(echo $DNS_IP | awk -F. '{print $4}')
+    
+    cat > /etc/bind/db.reverse << REVERSEEOF
+;
+; BIND reverse data file for $DOMAIN_NAME
+;
+\$TTL    604800
+@       IN      SOA     ns1.$DOMAIN_NAME. admin.$DOMAIN_NAME. (
+                    $SERIAL     ; Serial
+                    604800      ; Refresh
+                    86400       ; Retry
+                    2419200     ; Expire
+                    604800 )    ; Negative Cache TTL
+;
+@       IN      NS      ns1.$DOMAIN_NAME.
+$LAST_OCTET     IN      PTR     ns1.$DOMAIN_NAME.
+$LAST_OCTET     IN      PTR     www.$DOMAIN_NAME.
+$LAST_OCTET     IN      PTR     ftp.$DOMAIN_NAME.
+$LAST_OCTET     IN      PTR     mail.$DOMAIN_NAME.
+$LAST_OCTET     IN      PTR     ssh.$DOMAIN_NAME.
+REVERSEEOF
+    
+    # Set permission
+    chown -R bind:bind /etc/bind/
+    chmod 644 /etc/bind/db.$DOMAIN_NAME
+    chmod 644 /etc/bind/db.reverse
+    
+    # Cek konfigurasi
+    log_info "Memvalidasi konfigurasi DNS..."
+    if ! named-checkconf; then
+        log_error "Konfigurasi bind9 tidak valid"
+        return 1
+    fi
+    
+    if ! named-checkzone $DOMAIN_NAME /etc/bind/db.$DOMAIN_NAME; then
+        log_error "Forward zone tidak valid"
+        return 1
+    fi
+    
+    # Restart DNS service
+    systemctl restart bind9
+    systemctl enable bind9
+    
+    # Konfigurasi resolv.conf untuk menggunakan DNS server sendiri
+    cp /etc/resolv.conf /etc/resolv.conf.bak
+    cat > /etc/resolv.conf << RESOLVEOF
+nameserver $DNS_IP
+nameserver 8.8.8.8
+search $DOMAIN_NAME
+RESOLVEOF
+    
+    echo ""
+    log_info "DNS Server (Bind9) berhasil diinstall dan dikonfigurasi"
+    log_info "=========================================="
+    log_info "Domain: $DOMAIN_NAME"
+    log_info "DNS Server IP: $DNS_IP"
+    log_info "Forwarders: $DNS_FORWARDERS"
+    log_info "=========================================="
+    log_info "Record yang tersedia:"
+    log_info "  - ns1.$DOMAIN_NAME -> $DNS_IP"
+    log_info "  - www.$DOMAIN_NAME -> $DNS_IP"
+    log_info "  - ftp.$DOMAIN_NAME -> $DNS_IP"
+    log_info "  - mail.$DOMAIN_NAME -> $DNS_IP"
+    log_info "  - ssh.$DOMAIN_NAME -> $DNS_IP"
+    log_info "  - wp.$DOMAIN_NAME -> $DNS_IP"
+    log_info "=========================================="
+    log_info "Testing DNS: dig @$DNS_IP www.$DOMAIN_NAME"
 }
 
 # Fungsi untuk install WordPress
 install_wordpress() {
     log_step "Menginstall WordPress..."
+    
+    # Cek apakah Apache sudah terinstall
+    if ! systemctl is-active --quiet apache2 2>/dev/null; then
+        log_error "Apache2 harus diinstall terlebih dahulu sebelum WordPress"
+        log_info "Silakan install Apache2 terlebih dahulu (Menu 3)"
+        return 1
+    fi
     
     apt install php php-mysql php-curl php-gd php-mbstring php-xml php-xmlrpc php-soap php-intl php-zip -y
     apt install mariadb-server mariadb-client -y
@@ -424,6 +696,7 @@ install_wordpress() {
     systemctl start mariadb
     systemctl enable mariadb
     
+    # Secure MariaDB installation
     mysql << 'SQLEOF'
 CREATE DATABASE IF NOT EXISTS wordpress;
 CREATE USER IF NOT EXISTS 'wpuser'@'localhost' IDENTIFIED BY 'wp123456';
@@ -433,7 +706,7 @@ SQLEOF
     
     log_info "Download WordPress..."
     cd /tmp
-    wget https://wordpress.org/latest.tar.gz
+    wget -q https://wordpress.org/latest.tar.gz
     tar -xzf latest.tar.gz
     
     mkdir -p /var/www/html/wordpress
@@ -444,6 +717,20 @@ SQLEOF
     sed -i 's/username_here/wpuser/g' /var/www/html/wordpress/wp-config.php
     sed -i 's/password_here/wp123456/g' /var/www/html/wordpress/wp-config.php
     
+    # Generate unique keys and salts
+    KEYS=$(curl -s https://api.wordpress.org/secret-key/1.1/salt/)
+    if [[ -n "$KEYS" ]]; then
+        sed -i "/AUTH_KEY/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/SECURE_AUTH_KEY/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/LOGGED_IN_KEY/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/NONCE_KEY/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/AUTH_SALT/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/SECURE_AUTH_SALT/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/LOGGED_IN_SALT/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/NONCE_SALT/d" /var/www/html/wordpress/wp-config.php
+        sed -i "/table_prefix/i $KEYS" /var/www/html/wordpress/wp-config.php
+    fi
+    
     chown -R www-data:www-data /var/www/html/wordpress/
     chmod -R 755 /var/www/html/wordpress/
     
@@ -451,46 +738,81 @@ SQLEOF
     
     rm -rf /tmp/wordpress*
     
+    WEB_IP=$(choose_ip "WordPress")
+    
     log_info "WordPress berhasil diinstall"
-    log_info "Akses WordPress di: http://localhost/wordpress"
+    log_info "Akses WordPress: http://${WEB_IP}/wordpress"
     log_info "Database: wordpress | User: wpuser | Password: wp123456"
 }
 
-# Fungsi untuk install semua service
-install_all() {
-    log_step "Memulai instalasi semua service..."
+# Fungsi untuk install semua service (tanpa DNS)
+install_all_basic() {
+    log_step "Memulai instalasi semua service basic..."
     update_system
     install_apache
     install_ftp
     install_ssh
     install_wordpress
-    log_info "Semua service berhasil diinstall!"
-    log_info "Apache    : http://localhost"
-    log_info "FTP       : ftp://localhost (user: admin, pass: 123)"
-    log_info "SSH       : ssh admin@localhost (gunakan private key)"
-    log_info "WordPress : http://localhost/wordpress"
+    echo ""
+    log_info "=========================================="
+    log_info "Semua service basic berhasil diinstall!"
+    log_info "=========================================="
+    log_info "Apache: http://${APACHE_ACCESS_IP}"
+    log_info "FTP: ftp://${APACHE_ACCESS_IP} (user: admin, pass: 123)"
+    log_info "SSH: ssh admin@${APACHE_ACCESS_IP} (gunakan private key)"
+    log_info "WordPress: http://${APACHE_ACCESS_IP}/wordpress"
+    log_info "=========================================="
+}
+
+# Fungsi untuk install semua service lengkap dengan DNS
+install_all_complete() {
+    log_step "Memulai instalasi semua service lengkap dengan DNS..."
+    update_system
+    install_apache
+    install_ftp
+    install_ssh
+    install_dns
+    install_wordpress
+    
+    echo ""
+    log_info "=========================================="
+    log_info "SEMUA SERVICE BERHASIL DIINSTALL!"
+    log_info "=========================================="
+    log_info "Apache: http://${APACHE_ACCESS_IP}"
+    log_info "FTP: ftp://${APACHE_ACCESS_IP} (user: admin, pass: 123)"
+    log_info "SSH: ssh admin@${APACHE_ACCESS_IP} (gunakan private key)"
+    log_info "WordPress: http://${APACHE_ACCESS_IP}/wordpress"
+    log_info "=========================================="
+    log_info "DNS Server Information:"
+    log_info "  DNS Server IP: ${DNS_IP}"
+    log_info "  Domain: ${DOMAIN_NAME}"
+    log_info "=========================================="
 }
 
 # Fungsi untuk menampilkan menu utama
 show_menu() {
     echo ""
     echo -e "${YELLOW}${BOLD}========================================${NC}"
-    echo -e "${YELLOW}${BOLD}           MENU INSTALASI              ${NC}"
+    echo -e "${YELLOW}${BOLD}          MENU INSTALASI               ${NC}"
     echo -e "${YELLOW}${BOLD}========================================${NC}"
-    echo -e "${CYAN} 1.${NC} Install Semua Service"
-    echo -e "${CYAN} 2.${NC} Install Apache2 (Web Server)"
-    echo -e "${CYAN} 3.${NC} Install FTP (vsftpd)"
-    echo -e "${CYAN} 4.${NC} Install SSH (Secure Server)"
-    echo -e "${CYAN} 5.${NC} Install WordPress (Optional)"
-    echo -e "${CYAN} 6.${NC} Exit"
+    echo -e "${GREEN}1.${NC} Install Semua Service (Basic: Apache2 + FTP + SSH + WP)"
+    echo -e "${GREEN}2.${NC} Install Semua Service (Complete: + DNS Server)"
+    echo -e "${CYAN}3.${NC} Install Apache2 (Web Server)"
+    echo -e "${CYAN}4.${NC} Install FTP (vsftpd)"
+    echo -e "${CYAN}5.${NC} Install SSH (Secure Server)"
+    echo -e "${CYAN}6.${NC} Install DNS Server (Bind9)"
+    echo -e "${CYAN}7.${NC} Install WordPress (Optional)"
+    echo -e "${RED}8.${NC} Exit"
+    echo -e "${YELLOW}========================================${NC}"
     echo ""
-    echo -ne "${GREEN}Pilih menu (1-6): ${NC}"
+    echo -ne "${BOLD}${GREEN}Pilih menu (1-8): ${NC}"
 }
 
+# Fungsi untuk membaca input menu dengan aman
 prompt_menu_choice() {
     if ! IFS= read -r choice < /dev/tty; then
         echo ""
-        log_error "Gagal membaca input dari terminal."
+        log_error "Gagal membaca input"
         exit 1
     fi
 }
@@ -507,38 +829,47 @@ while true; do
     case $choice in
         1)
             echo ""
-            install_all
+            install_all_basic
             ;;
         2)
             echo ""
-            install_apache
+            install_all_complete
             ;;
         3)
             echo ""
-            install_ftp
+            install_apache
             ;;
         4)
             echo ""
-            install_ssh
+            install_ftp
             ;;
         5)
             echo ""
-            install_wordpress
+            install_ssh
             ;;
         6)
             echo ""
+            install_dns
+            ;;
+        7)
+            echo ""
+            install_wordpress
+            ;;
+        8)
+            echo ""
             log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
+            echo -e "${GREEN}========================================${NC}"
             echo -e "${GREEN}Script by TechCorp - All rights reserved${NC}"
-            tput sgr0
+            echo -e "${GREEN}Version: 2.0 - With DNS Server Support${NC}"
+            echo -e "${GREEN}========================================${NC}"
             exit 0
             ;;
         *)
-            log_error "Pilihan tidak valid! Silakan pilih 1-6"
+            log_error "Pilihan tidak valid! Silakan pilih 1-8"
             sleep 2
             ;;
     esac
     
     echo ""
-    read -r -p "Tekan Enter untuk kembali ke menu utama..." < /dev/tty
-    clear
+    read -p "Tekan Enter untuk kembali ke menu utama..." < /dev/tty
 done
