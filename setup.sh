@@ -101,18 +101,27 @@ get_port_80_listener() {
 show_banner() {
     clear
     echo -e "${BLUE}${BOLD}"
-    cat << "EOF"
- â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— 
- â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—
-    â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•
-    â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â• 
-    â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘ 
-    â•šâ•â•   â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â• â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â• 
-EOF
+    echo "â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—"
+    echo "â•‘                                                                              â•‘"
+    echo "â•‘    â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—         â•‘"
+    echo "â•‘    â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—        â•‘"
+    echo "â•‘       â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•        â•‘"
+    echo "â•‘       â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•         â•‘"
+    echo "â•‘       â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘             â•‘"
+    echo "â•‘       â•šâ•â•   â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â• â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•             â•‘"
+    echo "â•‘                                                                              â•‘"
+    echo "â•‘    â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—                                           â•‘"
+    echo "â•‘   â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—                                          â•‘"
+    echo "â•‘   â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘                                          â•‘"
+    echo "â•‘   â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘                                          â•‘"
+    echo "â•‘   â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•                                          â•‘"
+    echo "â•‘    â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•â•â•â•â•                                           â•‘"
+    echo "â•‘                                                                              â•‘"
+    echo "â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•"
     echo -e "${NC}"
-    echo -e "${CYAN}${BOLD}====================================================================${NC}"
-    echo -e "${YELLOW}${BOLD}     Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS${NC}"
-    echo -e "${CYAN}${BOLD}====================================================================${NC}"
+    echo -e "${CYAN}${BOLD}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
+    echo -e "${YELLOW}${BOLD}              Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS${NC}"
+    echo -e "${CYAN}${BOLD}â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${NC}"
     echo ""
 }
 
@@ -138,7 +147,6 @@ update_system() {
 install_apache() {
     log_step "Menginstall Apache2 Web Server..."
     
-    # Cek apakah Apache sudah terinstall
     if systemctl is-active --quiet apache2 2>/dev/null; then
         log_warning "Apache2 sudah terinstall dan berjalan"
         read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
@@ -151,7 +159,6 @@ install_apache() {
     
     apt install apache2 -y
     
-    # Pilih IP untuk Apache
     APACHE_ACCESS_IP=$(choose_ip "Apache2 Web Server")
     
     log_info "Membuat halaman web custom..."
@@ -297,7 +304,6 @@ HTMLEOF
     chown -R www-data:www-data /var/www/html/
     chmod -R 755 /var/www/html/
     
-    # Konfigurasi virtual host dengan IP spesifik
     cat > /etc/apache2/sites-available/000-default.conf << APACHECONF
 <VirtualHost $APACHE_ACCESS_IP:80>
     ServerAdmin webmaster@localhost
@@ -315,7 +321,6 @@ HTMLEOF
 </VirtualHost>
 APACHECONF
     
-    # Cek port 80
     PORT_80_LISTENER="$(get_port_80_listener)"
     if [[ -n "$PORT_80_LISTENER" && "$PORT_80_LISTENER" != *"apache2"* ]]; then
         log_error "Port 80 sudah dipakai proses lain: $PORT_80_LISTENER"
@@ -370,7 +375,6 @@ pasv_max_port=31000
 allow_writeable_chroot=YES
 FTPEOF
     
-    # Cek apakah user admin sudah ada
     if id "admin" &>/dev/null; then
         log_warning "User admin sudah ada"
         read -p "Reset password admin? (y/n): " -n 1 -r
@@ -469,10 +473,8 @@ install_dns() {
     
     apt install bind9 bind9utils bind9-doc dnsutils -y
     
-    # Pilih IP untuk DNS Server
     DNS_IP=$(choose_ip "DNS Server")
     
-    # Input domain name
     echo ""
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}Masukkan nama domain yang diinginkan${NC}"
@@ -486,7 +488,6 @@ install_dns() {
         log_info "Menggunakan domain default: $DOMAIN_NAME"
     fi
     
-    # Input forwarders
     echo ""
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}Masukkan DNS Forwarders (DNS upstream)${NC}"
@@ -502,33 +503,20 @@ install_dns() {
         done
     fi
     
-    # Konfigurasi named.conf.options
     cat > /etc/bind/named.conf.options << OPTIONSEOF
 options {
     directory "/var/cache/bind";
     
-    // Forwarders
     forwarders {
         $DNS_FORWARDERS
     };
     
-    // Allow queries from local network
     allow-query { any; };
-    
-    // Recursion
     recursion yes;
-    
-    // DNSSEC
     dnssec-validation auto;
-    
-    // Listen on specific IP
     listen-on { $DNS_IP; 127.0.0.1; };
     listen-on-v6 { none; };
-    
-    // Versi information
     version "DNS Server TechCorp";
-    
-    // Rate limiting
     rate-limit {
         responses-per-second 10;
         slip 2;
@@ -536,16 +524,13 @@ options {
 };
 OPTIONSEOF
     
-    # Konfigurasi named.conf.local
     cat > /etc/bind/named.conf.local << LOCALSEOF
-// Zone forward untuk $DOMAIN_NAME
 zone "$DOMAIN_NAME" {
     type master;
     file "/etc/bind/db.$DOMAIN_NAME";
     allow-update { none; };
 };
 
-// Zone reverse untuk $DOMAIN_NAME
 REVERSE_IP=\$(echo $DNS_IP | awk -F. '{print \$3"."\$2"."\$1}')
 zone "\${REVERSE_IP}.in-addr.arpa" {
     type master;
@@ -554,7 +539,6 @@ zone "\${REVERSE_IP}.in-addr.arpa" {
 };
 LOCALSEOF
     
-    # Buat forward zone file
     SERIAL=$(date +%Y%m%d%S)
     cat > /etc/bind/db.$DOMAIN_NAME << FORWARDEOF
 ;
@@ -572,33 +556,20 @@ LOCALSEOF
 @       IN      A       $DNS_IP
 @       IN      MX 10   mail.$DOMAIN_NAME.
 
-; Name Servers
 ns1     IN      A       $DNS_IP
 ns2     IN      A       $DNS_IP
-
-; Web Server
 www     IN      A       $DNS_IP
 web     IN      A       $DNS_IP
-
-; FTP Server
 ftp     IN      A       $DNS_IP
-
-; Mail Server
 mail    IN      A       $DNS_IP
-
-; SSH
 ssh     IN      A       $DNS_IP
-
-; WordPress
 wp      IN      A       $DNS_IP
 wordpress IN    A       $DNS_IP
 
-; CNAME records
 files   IN      CNAME   www
 dev     IN      CNAME   www
 FORWARDEOF
     
-    # Buat reverse zone file
     REVERSE_IP=$(echo $DNS_IP | awk -F. '{print $3"."$2"."$1}')
     LAST_OCTET=$(echo $DNS_IP | awk -F. '{print $4}')
     
@@ -622,12 +593,10 @@ $LAST_OCTET     IN      PTR     mail.$DOMAIN_NAME.
 $LAST_OCTET     IN      PTR     ssh.$DOMAIN_NAME.
 REVERSEEOF
     
-    # Set permission
     chown -R bind:bind /etc/bind/
     chmod 644 /etc/bind/db.$DOMAIN_NAME
     chmod 644 /etc/bind/db.reverse
     
-    # Cek konfigurasi
     log_info "Memvalidasi konfigurasi DNS..."
     if ! named-checkconf; then
         log_error "Konfigurasi bind9 tidak valid"
@@ -639,11 +608,9 @@ REVERSEEOF
         return 1
     fi
     
-    # Restart DNS service
     systemctl restart bind9
     systemctl enable bind9
     
-    # Konfigurasi resolv.conf untuk menggunakan DNS server sendiri
     cp /etc/resolv.conf /etc/resolv.conf.bak
     cat > /etc/resolv.conf << RESOLVEOF
 nameserver $DNS_IP
@@ -673,7 +640,6 @@ RESOLVEOF
 install_wordpress() {
     log_step "Menginstall WordPress..."
     
-    # Cek apakah Apache sudah terinstall
     if ! systemctl is-active --quiet apache2 2>/dev/null; then
         log_error "Apache2 harus diinstall terlebih dahulu sebelum WordPress"
         log_info "Silakan install Apache2 terlebih dahulu (Menu 3)"
@@ -687,7 +653,6 @@ install_wordpress() {
     systemctl start mariadb
     systemctl enable mariadb
     
-    # Secure MariaDB installation
     mysql << 'SQLEOF'
 CREATE DATABASE IF NOT EXISTS wordpress;
 CREATE USER IF NOT EXISTS 'wpuser'@'localhost' IDENTIFIED BY 'wp123456';
@@ -708,7 +673,6 @@ SQLEOF
     sed -i 's/username_here/wpuser/g' /var/www/html/wordpress/wp-config.php
     sed -i 's/password_here/wp123456/g' /var/www/html/wordpress/wp-config.php
     
-    # Generate unique keys and salts
     KEYS=$(curl -s https://api.wordpress.org/secret-key/1.1/salt/)
     if [[ -n "$KEYS" ]]; then
         sed -i "/AUTH_KEY/d" /var/www/html/wordpress/wp-config.php
@@ -799,7 +763,7 @@ show_menu() {
     echo -ne "${BOLD}${GREEN}Pilih menu (1-8): ${NC}"
 }
 
-# Fungsi untuk membaca input menu dengan aman
+# Fungsi untuk membaca input menu
 prompt_menu_choice() {
     if ! IFS= read -r choice < /dev/tty; then
         echo ""
