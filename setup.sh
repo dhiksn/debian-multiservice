@@ -68,21 +68,10 @@ get_network_address() {
 }
 
 # Fungsi untuk logging
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_step() {
-    echo -e "${CYAN}[STEP]${NC} $1"
-}
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 # Fungsi untuk update system (opsional)
 system_update() {
@@ -94,8 +83,8 @@ system_update() {
     echo ""
     echo -e "${YELLOW}Apakah Anda ingin mengupdate sistem terlebih dahulu?${NC}"
     echo -e "${CYAN}  (Jika sudah pernah update, pilih 'n' untuk mempercepat proses)${NC}"
-    echo -ne "${GREEN}Update sistem? (y/n, default: n): ${NC}"
-    read -p "" do_update
+    printf "${GREEN}Update sistem? (y/n, default: n): ${NC}"
+    read do_update
     
     if [[ "$do_update" =~ ^[Yy]$ ]]; then
         log_step "Mengupdate sistem..."
@@ -106,8 +95,7 @@ system_update() {
         log_info "Update sistem selesai"
         SYSTEM_UPDATED=true
     else
-        log_info "Melewati update sistem (menggunakan paket yang sudah ada)"
-        # Tetap lakukan apt update ringan untuk sync package list
+        log_info "Melewati update sistem (hanya sync package list)"
         apt update -y 2>/dev/null
     fi
 }
@@ -146,10 +134,8 @@ choose_ip() {
     done
     
     while true; do
-        echo -ne "${GREEN}Pilih interface [1-${#interfaces[@]}] (default 1): ${NC}"
-        if ! IFS= read -r choice < /dev/tty; then
-            choice=""
-        fi
+        printf "${GREEN}Pilih interface [1-%d] (default 1): ${NC}" "${#interfaces[@]}"
+        read choice
         
         if [[ -z "$choice" ]]; then
             choice=1
@@ -192,10 +178,8 @@ choose_dhcp_interface() {
     done
     
     while true; do
-        echo -ne "${GREEN}Pilih interface [1-${#interfaces[@]}]: ${NC}"
-        if ! IFS= read -r choice < /dev/tty; then
-            choice=""
-        fi
+        printf "${GREEN}Pilih interface [1-%d]: ${NC}" "${#interfaces[@]}"
+        read choice
         
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
             DHCP_INTERFACE="${interfaces[$((choice - 1))]}"
@@ -231,8 +215,8 @@ configure_dhcp_range() {
     echo -e "${CYAN}Konfigurasi DHCP Server${NC}"
     echo -e "${CYAN}========================================${NC}"
     
-    echo -ne "${GREEN}Masukkan prefix network (1-32, default: $DHCP_PREFIX): ${NC}"
-    read -p "" prefix_input
+    printf "${GREEN}Masukkan prefix network (1-32, default: $DHCP_PREFIX): ${NC}"
+    read prefix_input
     if [[ -n "$prefix_input" ]] && [[ "$prefix_input" =~ ^[0-9]+$ ]] && (( prefix_input >= 1 && prefix_input <= 32 )); then
         DHCP_PREFIX=$prefix_input
         DHCP_NETMASK=$(prefix_to_netmask $DHCP_PREFIX)
@@ -247,10 +231,10 @@ configure_dhcp_range() {
     echo -e "${YELLOW}Masukkan range IP (cukup angka akhir saja)${NC}"
     echo -e "${YELLOW}Contoh: 100-200 -> ${DHCP_SUBNET%.*}.100 - ${DHCP_SUBNET%.*}.200${NC}"
     
-    echo -ne "${GREEN}Range awal (contoh: 100): ${NC}"
-    read -p "" range_start
-    echo -ne "${GREEN}Range akhir (contoh: 200): ${NC}"
-    read -p "" range_end
+    printf "${GREEN}Range awal (contoh: 100): ${NC}"
+    read range_start
+    printf "${GREEN}Range akhir (contoh: 200): ${NC}"
+    read range_end
     
     if [[ -z "$range_start" ]]; then
         range_start=100
@@ -264,8 +248,8 @@ configure_dhcp_range() {
     DHCP_RANGE_END="${network_prefix}.${range_end}"
     
     echo ""
-    echo -ne "${GREEN}Gateway (default: $DHCP_ROUTER): ${NC}"
-    read -p "" gateway_input
+    printf "${GREEN}Gateway (default: $DHCP_ROUTER): ${NC}"
+    read gateway_input
     if [[ -n "$gateway_input" ]]; then
         DHCP_ROUTER=$gateway_input
         DHCP_SUBNET=$(get_network_address $DHCP_ROUTER $DHCP_PREFIX)
@@ -275,8 +259,8 @@ configure_dhcp_range() {
     fi
     
     echo ""
-    echo -ne "${GREEN}DNS server (default: 8.8.8.8, 8.8.4.4): ${NC}"
-    read -p "" dns_input
+    printf "${GREEN}DNS server (default: 8.8.8.8, 8.8.4.4): ${NC}"
+    read dns_input
     if [[ -n "$dns_input" ]]; then
         DHCP_DNS=$dns_input
     else
@@ -294,8 +278,8 @@ configure_dhcp_range() {
     echo -e "${CYAN}========================================${NC}"
     echo ""
     
-    echo -ne "${GREEN}Konfigurasi sudah benar? (y/n): ${NC}"
-    read -p "" confirm
+    printf "${GREEN}Konfigurasi sudah benar? (y/n): ${NC}"
+    read confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         log_warning "Konfigurasi dibatalkan"
         return 1
@@ -304,12 +288,7 @@ configure_dhcp_range() {
     return 0
 }
 
-# Fungsi untuk mengecek port 80
-get_port_80_listener() {
-    ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
-}
-
-# ─── Banner ──────────────────────────────────────────────────
+# Banner
 show_banner() {
     clear
     echo -e "${BLUE}${BOLD}"
@@ -332,7 +311,7 @@ EOF
     echo ""
 }
 
-# Fungsi untuk mengecek root privileges
+# Cek root
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         log_error "Script ini harus dijalankan sebagai root!"
@@ -340,125 +319,46 @@ check_root() {
     fi
 }
 
-# Fungsi untuk install Apache2
+# Install Apache2
 install_apache() {
     log_step "Menginstall Apache2 Web Server..."
     
-    if systemctl is-active --quiet apache2 2>/dev/null; then
-        log_warning "Apache2 sudah terinstall dan berjalan"
-        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Melewati instalasi Apache2"
-            return 0
-        fi
-    fi
-    
-    # Install tanpa upgrade paket yang sudah ada
-    apt install -y --no-upgrade apache2 2>/dev/null || apt install -y apache2
+    apt install -y apache2
     
     APACHE_ACCESS_IP=$(choose_ip "Apache2 Web Server")
     
-    log_info "Membuat halaman web custom..."
     cat > /var/www/html/index.html << 'HTMLEOF'
 <!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TechCorp - Solusi Teknologi Terpercaya</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a1a; color: #e0e0e0; }
-        header { background: linear-gradient(135deg, #1a1a3e, #0d47a1); padding: 60px 20px; text-align: center; border-bottom: 3px solid #2196F3; }
-        header h1 { font-size: 3.5em; color: #2196F3; letter-spacing: 4px; text-shadow: 0 0 20px rgba(33,150,243,0.5); }
-        header p { font-size: 1.2em; color: #90CAF9; margin-top: 10px; }
-        nav { background: #0d1b2a; padding: 15px; text-align: center; position: sticky; top: 0; z-index: 100; }
-        nav a { color: #2196F3; text-decoration: none; margin: 0 20px; font-weight: bold; font-size: 1em; transition: color 0.3s; }
-        nav a:hover { color: #64B5F6; }
-        .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
-        .section { margin-bottom: 60px; }
-        .section h2 { font-size: 2em; color: #2196F3; border-left: 5px solid #2196F3; padding-left: 15px; margin-bottom: 20px; }
-        .about-text { font-size: 1.1em; line-height: 1.8; color: #b0bec5; }
-        .services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin-top: 20px; }
-        .service-card { background: #0d1b2a; border: 1px solid #1565C0; border-radius: 12px; padding: 30px; text-align: center; transition: transform 0.3s, box-shadow 0.3s; }
-        .service-card:hover { transform: translateY(-8px); box-shadow: 0 10px 30px rgba(33,150,243,0.3); }
-        .service-card .icon { font-size: 3em; margin-bottom: 15px; }
-        .service-card h3 { color: #2196F3; font-size: 1.3em; margin-bottom: 10px; }
-        .service-card p { color: #90A4AE; line-height: 1.6; }
-        .contact-info { background: #0d1b2a; border-radius: 12px; padding: 30px; border: 1px solid #1565C0; }
-        .contact-info p { margin: 12px 0; font-size: 1.05em; color: #b0bec5; }
-        .contact-info span { color: #2196F3; font-weight: bold; }
-        footer { background: #050510; text-align: center; padding: 25px; color: #546E7A; border-top: 1px solid #1565C0; }
-        footer span { color: #2196F3; }
-    </style>
+<html>
+<head><title>TechCorp</title>
+<style>
+body{font-family:Arial;background:#0a0a1a;color:#fff;text-align:center;padding:50px}
+h1{color:#2196F3}
+</style>
 </head>
 <body>
-    <header>
-        <h1>⚡ TECHCORP</h1>
-        <p>Solusi Teknologi Terdepan untuk Bisnis Modern</p>
-    </header>
-    <nav>
-        <a href="#about">Tentang Kami</a>
-        <a href="#services">Layanan</a>
-        <a href="#contact">Kontak</a>
-    </nav>
-    <div class="container">
-        <div class="section" id="about">
-            <h2>Tentang Kami</h2>
-            <p class="about-text">
-                <strong style="color:#2196F3">TechCorp</strong> adalah perusahaan teknologi terkemuka yang berdedikasi
-                untuk memberikan solusi digital inovatif kepada klien kami.
-            </p>
-        </div>
-        <div class="section" id="services">
-            <h2>Layanan Kami</h2>
-            <div class="services-grid">
-                <div class="service-card"><div class="icon">🌐</div><h3>Web Development</h3><p>Pengembangan website modern.</p></div>
-                <div class="service-card"><div class="icon">🔒</div><h3>Cybersecurity</h3><p>Perlindungan dari ancaman siber.</p></div>
-                <div class="service-card"><div class="icon">📡</div><h3>Network Solutions</h3><p>Infrastruktur jaringan handal.</p></div>
-                <div class="service-card"><div class="icon">🖥️</div><h3>DHCP Server</h3><p>Manajemen IP address otomatis.</p></div>
-            </div>
-        </div>
-        <div class="section" id="contact">
-            <h2>Kontak</h2>
-            <div class="contact-info">
-                <p>🏢 TechCorp Indonesia | 📧 info@techcorp.id | 📞 +62 21 1234 5678</p>
-            </div>
-        </div>
-    </div>
-    <footer><p>&copy; 2025 TechCorp Indonesia. All Rights Reserved.</p></footer>
+<h1>⚡ TECHCORP</h1>
+<p>Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS + DHCP</p>
+<p>Server berjalan dengan baik!</p>
+<hr>
+<p>&copy; 2025 TechCorp Indonesia</p>
 </body>
 </html>
 HTMLEOF
     
     chown -R www-data:www-data /var/www/html/
-    chmod -R 755 /var/www/html/
-    
-    systemctl enable apache2 2>/dev/null
+    systemctl enable apache2
     systemctl restart apache2
     
     log_info "✅ Apache2 berhasil diinstall!"
     log_info "   Akses: http://${APACHE_ACCESS_IP}"
 }
 
-# Fungsi untuk install vsftpd
+# Install vsftpd
 install_ftp() {
     log_step "Menginstall vsftpd FTP Server..."
     
-    if systemctl is-active --quiet vsftpd 2>/dev/null; then
-        log_warning "vsftpd sudah terinstall"
-        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Melewati instalasi vsftpd"
-            return 0
-        fi
-    fi
-    
-    apt install -y --no-upgrade vsftpd 2>/dev/null || apt install -y vsftpd
-    
-    cp /etc/vsftpd.conf /etc/vsftpd.conf.bak 2>/dev/null
+    apt install -y vsftpd
     
     cat > /etc/vsftpd.conf << 'FTPEOF'
 listen=YES
@@ -467,36 +367,28 @@ anonymous_enable=NO
 local_enable=YES
 write_enable=YES
 local_umask=022
-dirmessage_enable=YES
-use_localtime=YES
-xferlog_enable=YES
-connect_from_port_20=YES
 chroot_local_user=YES
-secure_chroot_dir=/var/run/vsftpd/empty
-pam_service_name=vsftpd
 allow_writeable_chroot=YES
+pam_service_name=vsftpd
 FTPEOF
     
     if ! id "admin" &>/dev/null; then
-        log_info "Membuat user admin..."
         useradd -m -s /bin/bash admin
         echo "admin:123" | chpasswd
     fi
     
     systemctl restart vsftpd
-    systemctl enable vsftpd 2>/dev/null
+    systemctl enable vsftpd
     
     log_info "✅ vsftpd berhasil diinstall!"
     log_info "   User: admin | Password: 123"
 }
 
-# Fungsi untuk install SSH Server
+# Install SSH
 install_ssh() {
     log_step "Menginstall OpenSSH Server..."
     
-    apt install -y --no-upgrade openssh-server 2>/dev/null || apt install -y openssh-server
-    
-    cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak 2>/dev/null
+    apt install -y openssh-server
     
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
     sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -514,23 +406,22 @@ install_ssh() {
     chown -R admin:admin /home/admin/.ssh
     
     systemctl restart sshd
-    systemctl enable sshd 2>/dev/null
+    systemctl enable sshd
     
     log_info "✅ OpenSSH berhasil dikonfigurasi!"
     log_info "   Private key: /home/admin/.ssh/id_rsa"
 }
 
-# Fungsi untuk install DNS Server
+# Install DNS
 install_dns() {
     log_step "Menginstall DNS Server (Bind9)..."
     
-    apt install -y --no-upgrade bind9 bind9utils dnsutils 2>/dev/null || apt install -y bind9 bind9utils dnsutils
+    apt install -y bind9 bind9utils dnsutils
     
     DNS_IP=$(choose_ip "DNS Server")
     
-    echo ""
-    echo -ne "${GREEN}Nama domain (contoh: techcorp.local): ${NC}"
-    read -p "" DOMAIN_NAME
+    printf "${GREEN}Nama domain (contoh: techcorp.local): ${NC}"
+    read DOMAIN_NAME
     [[ -z "$DOMAIN_NAME" ]] && DOMAIN_NAME="techcorp.local"
     
     cat > /etc/bind/named.conf.options << OPTIONSEOF
@@ -539,7 +430,6 @@ options {
     forwarders { 8.8.8.8; 8.8.4.4; };
     allow-query { any; };
     recursion yes;
-    dnssec-validation auto;
     listen-on { $DNS_IP; 127.0.0.1; };
     listen-on-v6 { none; };
 };
@@ -560,22 +450,21 @@ LOCALSEOF
 @       IN      A       $DNS_IP
 ns1     IN      A       $DNS_IP
 www     IN      A       $DNS_IP
-ftp     IN      A       $DNS_IP
 FORWARDEOF
     
     chown -R bind:bind /etc/bind/
     systemctl restart bind9
-    systemctl enable bind9 2>/dev/null
+    systemctl enable bind9
     
     log_info "✅ DNS Server berhasil diinstall!"
     log_info "   Domain: $DOMAIN_NAME | IP: $DNS_IP"
 }
 
-# Fungsi untuk install DHCP Server
+# Install DHCP
 install_dhcp() {
     log_step "Menginstall DHCP Server (isc-dhcp-server)..."
     
-    apt install -y --no-upgrade isc-dhcp-server 2>/dev/null || apt install -y isc-dhcp-server
+    apt install -y isc-dhcp-server
     
     choose_dhcp_interface
     if ! configure_dhcp_range; then
@@ -601,27 +490,26 @@ DHPCEOF
     echo "INTERFACESv4=\"$DHCP_INTERFACE\"" > /etc/default/isc-dhcp-server
     
     systemctl restart isc-dhcp-server
-    systemctl enable isc-dhcp-server 2>/dev/null
+    systemctl enable isc-dhcp-server
     
     log_info "✅ DHCP Server berhasil diinstall!"
     log_info "   Interface: $DHCP_INTERFACE | Subnet: $DHCP_SUBNET/$DHCP_PREFIX"
     log_info "   Range: $DHCP_RANGE_START - $DHCP_RANGE_END"
 }
 
-# Fungsi untuk install WordPress
+# Install WordPress
 install_wordpress() {
     log_step "Menginstall WordPress..."
     
-    if ! systemctl is-active --quiet apache2 2>/dev/null; then
+    if ! systemctl is-active --quiet apache2; then
         log_error "Apache2 harus diinstall terlebih dahulu!"
         return 1
     fi
     
-    apt install -y --no-upgrade php php-mysql php-curl php-gd php-mbstring php-xml php-zip mariadb-server wget 2>/dev/null || \
     apt install -y php php-mysql php-curl php-gd php-mbstring php-xml php-zip mariadb-server wget
     
     systemctl start mariadb
-    systemctl enable mariadb 2>/dev/null
+    systemctl enable mariadb
     
     mysql << 'SQLEOF'
 CREATE DATABASE IF NOT EXISTS wordpress;
@@ -649,26 +537,18 @@ SQLEOF
     log_info "   URL: http://${APACHE_ACCESS_IP}/wordpress"
 }
 
-# Fungsi untuk install semua service basic
+# Install semua basic
 install_all_basic() {
     system_update
     install_apache
     install_ftp
     install_ssh
     install_wordpress
-    
     echo ""
-    log_info "=========================================="
     log_info "✅ SEMUA SERVICE BASIC BERHASIL DIINSTALL!"
-    log_info "=========================================="
-    log_info "Apache: http://${APACHE_ACCESS_IP}"
-    log_info "FTP: ftp://${APACHE_ACCESS_IP} (admin/123)"
-    log_info "SSH: ssh admin@${APACHE_ACCESS_IP}"
-    log_info "WordPress: http://${APACHE_ACCESS_IP}/wordpress"
-    log_info "=========================================="
 }
 
-# Fungsi untuk install semua service complete
+# Install semua complete
 install_all_complete() {
     system_update
     install_apache
@@ -677,21 +557,11 @@ install_all_complete() {
     install_dns
     install_dhcp
     install_wordpress
-    
     echo ""
-    log_info "=========================================="
     log_info "✅ SEMUA SERVICE COMPLETE BERHASIL DIINSTALL!"
-    log_info "=========================================="
-    log_info "Apache: http://${APACHE_ACCESS_IP}"
-    log_info "FTP: ftp://${APACHE_ACCESS_IP} (admin/123)"
-    log_info "SSH: ssh admin@${APACHE_ACCESS_IP}"
-    log_info "DNS: $DOMAIN_NAME @ $DNS_IP"
-    log_info "DHCP: $DHCP_INTERFACE ($DHCP_SUBNET/$DHCP_PREFIX)"
-    log_info "WordPress: http://${APACHE_ACCESS_IP}/wordpress"
-    log_info "=========================================="
 }
 
-# Menu utama
+# Menu
 show_menu() {
     echo ""
     echo -e "${YELLOW}${BOLD}========================================${NC}"
@@ -707,16 +577,16 @@ show_menu() {
     echo -e "${CYAN}8.${NC} Install WordPress"
     echo -e "${RED}9.${NC} Exit"
     echo -e "${YELLOW}========================================${NC}"
-    echo -ne "${GREEN}Pilih menu (1-9): ${NC}"
+    printf "${GREEN}Pilih menu (1-9): ${NC}"
 }
 
-# Main program
+# ==================== MAIN ====================
 check_root
 
 while true; do
     show_banner
     show_menu
-    read -r choice
+    read choice
     
     case $choice in
         1) install_all_basic ;;
@@ -728,12 +598,18 @@ while true; do
         7) system_update; install_dhcp ;;
         8) system_update; install_wordpress ;;
         9) 
+            echo ""
             log_info "Terima kasih telah menggunakan TechCorp Installer!"
             exit 0
             ;;
-        *) log_error "Pilihan tidak valid!"; sleep 1 ;;
+        *) 
+            echo ""
+            log_error "Pilihan tidak valid! Masukkan angka 1-9"
+            sleep 2
+            ;;
     esac
     
     echo ""
-    read -p "Tekan Enter untuk kembali ke menu..." < /dev/tty
+    printf "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}"
+    read
 done
