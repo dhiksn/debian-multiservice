@@ -97,26 +97,21 @@ get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
 }
 
-# Fungsi untuk menampilkan banner
+# ─── Banner ──────────────────────────────────────────────────
 show_banner() {
     echo -e "${BLUE}${BOLD}"
-    echo "    +------------------------------------------------------------------+"
-    echo "    |                                                                  |"
-    echo "    |    â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—     |"
-    echo "    |    â•šâ•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—    |"
-    echo "    |       â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•    |"
-    echo "    |       â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—    |"
-    echo "    |       â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘    |"
-    echo "    |       â•šâ•â•   â•šâ•â•â•â•â•â•â• â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â• â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•    |"
-    echo "    |                                                                  |"
-    echo "    |    â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•— â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—                               |"
-    echo "    |   â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—                              |"
-    echo "    |   â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘                              |"
-    echo "    |   â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘                              |"
-    echo "    |   â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•                              |"
-    echo "    |    â•šâ•â•â•â•â•â• â•šâ•â•â•â•â•â• â•šâ•â•  â•šâ•â•â•šâ•â•â•â•â•â•                               |"
-    echo "    |                                                                  |"
-    echo "    +------------------------------------------------------------------+"
+    cat << "EOF"
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║    ████████╗███████╗ ██████╗██╗  ██╗ ██████╗ ██████╗ ██████╗ ██████╗         ║
+║    ╚══██╔══╝██╔════╝██╔════╝██║  ██║██╔════╝██╔═══██╗██╔══██╗██╔══██╗        ║
+║       ██║   █████╗  ██║     ███████║██║     ██║   ██║██████╔╝██████╔╝        ║
+║       ██║   ██╔══╝  ██║     ██╔══██║██║     ██║   ██║██╔══██╗██╔═══╝         ║
+║       ██║   ███████╗╚██████╗██║  ██║╚██████╗╚██████╔╝██║  ██║██║             ║
+║       ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝             ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+EOF
     echo -e "${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
     echo -e "${YELLOW}${BOLD}         Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS${NC}"
@@ -169,133 +164,83 @@ install_apache() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TechCorp - Solusi Teknologi Terpercaya</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-        .container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            max-width: 1200px;
-            width: 100%;
-            overflow: hidden;
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px;
-            text-align: center;
-        }
-        .header h1 {
-            font-size: 3em;
-            margin-bottom: 10px;
-        }
-        .header p {
-            font-size: 1.2em;
-            opacity: 0.9;
-        }
-        .content {
-            padding: 40px;
-        }
-        .services {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        .service-card {
-            background: #f7f7f7;
-            padding: 25px;
-            border-radius: 10px;
-            text-align: center;
-            transition: transform 0.3s;
-        }
-        .service-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-        }
-        .service-card h3 {
-            color: #667eea;
-            margin-bottom: 15px;
-        }
-        .contact {
-            background: #f7f7f7;
-            padding: 30px;
-            border-radius: 10px;
-            margin-top: 30px;
-            text-align: center;
-        }
-        .contact h3 {
-            color: #667eea;
-            margin-bottom: 15px;
-        }
-        footer {
-            background: #333;
-            color: white;
-            text-align: center;
-            padding: 20px;
-            font-size: 0.9em;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a1a; color: #e0e0e0; }
+        header { background: linear-gradient(135deg, #1a1a3e, #0d47a1); padding: 60px 20px; text-align: center; border-bottom: 3px solid #2196F3; }
+        header h1 { font-size: 3.5em; color: #2196F3; letter-spacing: 4px; text-shadow: 0 0 20px rgba(33,150,243,0.5); }
+        header p { font-size: 1.2em; color: #90CAF9; margin-top: 10px; }
+        nav { background: #0d1b2a; padding: 15px; text-align: center; position: sticky; top: 0; z-index: 100; }
+        nav a { color: #2196F3; text-decoration: none; margin: 0 20px; font-weight: bold; font-size: 1em; transition: color 0.3s; }
+        nav a:hover { color: #64B5F6; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
+        .section { margin-bottom: 60px; }
+        .section h2 { font-size: 2em; color: #2196F3; border-left: 5px solid #2196F3; padding-left: 15px; margin-bottom: 20px; }
+        .about-text { font-size: 1.1em; line-height: 1.8; color: #b0bec5; }
+        .services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin-top: 20px; }
+        .service-card { background: #0d1b2a; border: 1px solid #1565C0; border-radius: 12px; padding: 30px; text-align: center; transition: transform 0.3s, box-shadow 0.3s; }
+        .service-card:hover { transform: translateY(-8px); box-shadow: 0 10px 30px rgba(33,150,243,0.3); }
+        .service-card .icon { font-size: 3em; margin-bottom: 15px; }
+        .service-card h3 { color: #2196F3; font-size: 1.3em; margin-bottom: 10px; }
+        .service-card p { color: #90A4AE; line-height: 1.6; }
+        .contact-info { background: #0d1b2a; border-radius: 12px; padding: 30px; border: 1px solid #1565C0; }
+        .contact-info p { margin: 12px 0; font-size: 1.05em; color: #b0bec5; }
+        .contact-info span { color: #2196F3; font-weight: bold; }
+        footer { background: #050510; text-align: center; padding: 25px; color: #546E7A; border-top: 1px solid #1565C0; }
+        footer span { color: #2196F3; }
     </style>
 </head>
 <body>
+    <header>
+        <h1>⚡ TECHCORP</h1>
+        <p>Solusi Teknologi Terdepan untuk Bisnis Modern</p>
+    </header>
+    <nav>
+        <a href="#about">Tentang Kami</a>
+        <a href="#services">Layanan</a>
+        <a href="#contact">Kontak</a>
+    </nav>
     <div class="container">
-        <div class="header">
-            <h1>TechCorp</h1>
-            <p>Solusi Teknologi Inovatif untuk Masa Depan</p>
-        </div>
-        <div class="content">
+        <div class="section" id="about">
             <h2>Tentang Kami</h2>
-            <p style="margin: 20px 0; line-height: 1.6;">
-                TechCorp adalah perusahaan teknologi terkemuka yang menyediakan solusi digital komprehensif 
-                untuk bisnis modern. Dengan pengalaman lebih dari 10 tahun, kami telah membantu ribuan klien 
-                mengubah ide menjadi realitas digital.
+            <p class="about-text">
+                <strong style="color:#2196F3">TechCorp</strong> adalah perusahaan teknologi terkemuka yang berdedikasi
+                untuk memberikan solusi digital inovatif kepada klien kami. Dengan pengalaman lebih dari 10 tahun,
+                kami telah membantu ratusan bisnis bertransformasi secara digital.
             </p>
-            
+        </div>
+        <div class="section" id="services">
             <h2>Layanan Kami</h2>
-            <div class="services">
+            <div class="services-grid">
                 <div class="service-card">
+                    <div class="icon">🌐</div>
                     <h3>Web Development</h3>
-                    <p>Membangun website modern, responsif, dan scalable dengan teknologi terbaru.</p>
+                    <p>Pengembangan website dan aplikasi web modern, responsif, dan berperforma tinggi.</p>
                 </div>
                 <div class="service-card">
+                    <div class="icon">🔒</div>
                     <h3>Cybersecurity</h3>
-                    <p>Perlindungan sistem dan data dari ancaman siber dengan solusi keamanan terbaik.</p>
+                    <p>Perlindungan menyeluruh terhadap ancaman siber, audit keamanan, penetration testing.</p>
                 </div>
                 <div class="service-card">
+                    <div class="icon">📡</div>
                     <h3>Network Solutions</h3>
-                    <p>Infrastruktur jaringan yang handal dan aman untuk mendukung operasional bisnis.</p>
+                    <p>Infrastruktur jaringan yang handal, scalable, dan aman untuk enterprise.</p>
                 </div>
-            </div>
-            
-            <div class="contact">
-                <h3>Hubungi Kami</h3>
-                <p>Email: info@techcorp.com</p>
-                <p>Telepon: (021) 1234-5678</p>
-                <p>Alamat: Jl. Teknologi No. 123, Jakarta Selatan</p>
-                <p>DNS Server: ns1.techcorp.local</p>
             </div>
         </div>
-        <footer>
-            <p>&copy; 2025 TechCorp. All rights reserved. | Powered by Apache2 on Debian</p>
-        </footer>
+        <div class="section" id="contact">
+            <h2>Kontak</h2>
+            <div class="contact-info">
+                <p>🏢 <span>Perusahaan:</span> TechCorp Indonesia</p>
+                <p>📍 <span>Alamat:</span> Jl. Teknologi No. 1, Jakarta Selatan</p>
+                <p>📧 <span>Email:</span> info@techcorp.id</p>
+                <p>📞 <span>Telepon:</span> +62 21 1234 5678</p>
+            </div>
+        </div>
     </div>
+    <footer>
+        <p>&copy; 2025 <span>TechCorp Indonesia</span>. All Rights Reserved.</p>
+    </footer>
 </body>
 </html>
 HTMLEOF
@@ -814,7 +759,6 @@ while true; do
             log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
             echo -e "${GREEN}========================================${NC}"
             echo -e "${GREEN}Script by TechCorp - All rights reserved${NC}"
-            echo -e "${GREEN}Version: 2.0 - With DNS Server Support${NC}"
             echo -e "${GREEN}========================================${NC}"
             exit 0
             ;;
