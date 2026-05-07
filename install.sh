@@ -61,21 +61,21 @@ read_input() {
     local default="$2"
     local input=""
     
-    # Redirect input dari /dev/tty untuk membaca dari terminal
+    # Pastikan input dari terminal
     exec < /dev/tty
     
+    # Tampilkan prompt
     if [[ -n "$prompt" ]]; then
-        # Gunakan printf dengan stdbuf untuk memastikan output langsung keluar
-        stdbuf -o0 printf "%s" "$prompt" 2>/dev/null || printf "%s" "$prompt"
-        # Force flush output
-        sync
+        echo -n "$prompt" > /dev/tty
     fi
     
-    if ! IFS= read -r input; then
+    # Baca input
+    if ! IFS= read -r input < /dev/tty; then
         echo ""
         return 1
     fi
     
+    # Jika input kosong dan ada default, gunakan default
     if [[ -z "$input" ]] && [[ -n "$default" ]]; then
         echo "$default"
     else
@@ -91,44 +91,55 @@ select_ip() {
     local line=""
     local idx=1
     local choice=""
-    local selected_if=""
     local selected_ip=""
     
-    exec < /dev/tty
-
+    # Kumpulkan semua interface yang aktif
     while IFS= read -r line; do
         interfaces+=("$line")
-    done < <(ip -o -4 addr show up scope global | awk '{print $2 "|" $4}')
-
+    done < <(ip -o -4 addr show up scope global 2>/dev/null | awk '{print $2 "|" $4}')
+    
+    # Jika tidak ada interface, gunakan hostname -I
     if [[ ${#interfaces[@]} -eq 0 ]]; then
-        selected_ip="$(hostname -I | awk '{print $1}')"
+        selected_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        if [[ -z "$selected_ip" ]]; then
+            selected_ip="127.0.0.1"
+        fi
         echo "$selected_ip"
         return 0
     fi
-
-    echo -e "${CYAN}${prompt_msg}${NC}" >&2
+    
+    # Tampilkan daftar interface
+    echo -e "${CYAN}${prompt_msg}${NC}" > /dev/tty
     for line in "${interfaces[@]}"; do
-        echo -e "  ${YELLOW}${idx}.${NC} ${line%%|*} -> ${line##*|}" >&2
+        local iface_name="${line%%|*}"
+        local iface_ip="${line##*|}"
+        iface_ip="${iface_ip%%/*}"
+        echo -e "  ${YELLOW}${idx}.${NC} ${iface_name} -> ${iface_ip}" > /dev/tty
         idx=$((idx + 1))
     done
-
+    
+    # Minta user memilih
     while true; do
-        # Gunakan read_input dengan prompt yang benar
-        choice=$(read_input "\033[0;36mPilih interface [1-${#interfaces[@]}] (default 1): \033[0m" "1")
+        # Gunakan read_input langsung dengan prompt yang jelas
+        exec < /dev/tty
+        echo -n -e "${CYAN}Pilih nomor interface [1-${#interfaces[@]}] (default 1): ${NC}" > /dev/tty
+        read -r choice < /dev/tty
         
+        # Jika user langsung enter, pilih default 1
         if [[ -z "$choice" ]]; then
-            choice=1
+            choice="1"
         fi
-
+        
+        # Validasi input
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
-            selected_if="${interfaces[$((choice - 1))]}"
-            selected_ip="${selected_if##*|}"
+            local selected_line="${interfaces[$((choice - 1))]}"
+            selected_ip="${selected_line##*|}"
             selected_ip="${selected_ip%%/*}"
             echo "$selected_ip"
             return 0
+        else
+            echo -e "${RED}[ERROR] Pilihan tidak valid! Masukkan angka 1-${#interfaces[@]}.${NC}" > /dev/tty
         fi
-
-        log_error "Pilihan interface tidak valid." >&2
     done
 }
 
@@ -139,8 +150,50 @@ choose_access_ip() {
 
 # Fungsi untuk memilih interface untuk DHCP Server
 select_dhcp_interface() {
-    DHCP_INTERFACE=$(select_ip "Pilih interface untuk DHCP Server:")
-    [[ -n "$DHCP_INTERFACE" ]]
+    DHCP_INTERFACE_NAME=""
+    local interfaces=()
+    local line=""
+    local idx=1
+    local choice=""
+    
+    # Kumpulkan semua interface yang aktif
+    while IFS= read -r line; do
+        interfaces+=("$line")
+    done < <(ip -o -4 addr show up scope global 2>/dev/null | awk '{print $2 "|" $4}')
+    
+    if [[ ${#interfaces[@]} -eq 0 ]]; then
+        DHCP_INTERFACE_NAME="eth0"
+        echo "$DHCP_INTERFACE_NAME"
+        return 0
+    fi
+    
+    echo -e "${CYAN}Pilih interface untuk DHCP Server:${NC}" > /dev/tty
+    for line in "${interfaces[@]}"; do
+        local iface_name="${line%%|*}"
+        local iface_ip="${line##*|}"
+        iface_ip="${iface_ip%%/*}"
+        echo -e "  ${YELLOW}${idx}.${NC} ${iface_name} -> ${iface_ip}" > /dev/tty
+        idx=$((idx + 1))
+    done
+    
+    while true; do
+        exec < /dev/tty
+        echo -n -e "${CYAN}Pilih nomor interface [1-${#interfaces[@]}] (default 1): ${NC}" > /dev/tty
+        read -r choice < /dev/tty
+        
+        if [[ -z "$choice" ]]; then
+            choice="1"
+        fi
+        
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
+            local selected_line="${interfaces[$((choice - 1))]}"
+            DHCP_INTERFACE_NAME="${selected_line%%|*}"
+            echo "$DHCP_INTERFACE_NAME"
+            return 0
+        else
+            echo -e "${RED}[ERROR] Pilihan tidak valid! Masukkan angka 1-${#interfaces[@]}.${NC}" > /dev/tty
+        fi
+    done
 }
 
 # Fungsi untuk mendapatkan network dari IP
@@ -493,7 +546,7 @@ install_dhcp() {
     log_info "Menginstall isc-dhcp-server..."
     apt install -y isc-dhcp-server
 
-    select_dhcp_interface
+    DHCP_INTERFACE=$(select_dhcp_interface)
     [[ -z "$DHCP_INTERFACE" ]] && DHCP_INTERFACE="eth0"
     
     INTERFACE_IP=$(ip -o -4 addr show | grep "$DHCP_INTERFACE" | awk '{print $4}' | cut -d/ -f1 | head -1)
@@ -617,7 +670,7 @@ main() {
         show_menu
         
         # Tampilkan prompt pilihan
-        echo -ne "${CYAN}Pilih opsi [1-8]: ${NC}"
+        echo -n -e "${CYAN}Pilih opsi [1-8]: ${NC}"
         
         # Baca input dari terminal
         exec < /dev/tty
@@ -646,7 +699,7 @@ main() {
         esac
 
         echo ""
-        echo -ne "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}"
+        echo -n -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}"
         exec < /dev/tty
         read -r
         clear
