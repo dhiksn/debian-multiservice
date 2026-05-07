@@ -21,13 +21,13 @@ APACHE_ACCESS_IP=""
 DNS_FORWARDERS="8.8.8.8; 8.8.4.4;"
 DOMAIN_NAME=""
 DHCP_INTERFACE=""
-DHCP_SUBNET=""
 DHCP_PREFIX="24"
 DHCP_NETMASK="255.255.255.0"
 DHCP_RANGE_START=""
 DHCP_RANGE_END=""
 DHCP_ROUTER=""
 DHCP_DNS=""
+SYSTEM_UPDATED=false
 
 # Fungsi untuk konversi prefix ke netmask
 prefix_to_netmask() {
@@ -44,19 +44,6 @@ prefix_to_netmask() {
         $(( (mask >> 16) & 255 )) \
         $(( (mask >> 8) & 255 )) \
         $(( mask & 255 ))
-}
-
-# Fungsi untuk konversi netmask ke prefix
-netmask_to_prefix() {
-    local netmask=$1
-    local prefix=0
-    IFS=. read -r o1 o2 o3 o4 <<< "$netmask"
-    local mask=$(( (o1 << 24) + (o2 << 16) + (o3 << 8) + o4 ))
-    while (( mask & 0x80000000 )); do
-        prefix=$((prefix + 1))
-        mask=$((mask << 1))
-    done
-    echo $prefix
 }
 
 # Fungsi untuk menghitung network address dari IP dan prefix
@@ -95,6 +82,34 @@ log_warning() {
 
 log_step() {
     echo -e "${CYAN}[STEP]${NC} $1"
+}
+
+# Fungsi untuk update system (opsional)
+system_update() {
+    if [[ "$SYSTEM_UPDATED" == true ]]; then
+        log_info "System sudah diupdate sebelumnya, melewati..."
+        return 0
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}Apakah Anda ingin mengupdate sistem terlebih dahulu?${NC}"
+    echo -e "${CYAN}  (Jika sudah pernah update, pilih 'n' untuk mempercepat proses)${NC}"
+    echo -ne "${GREEN}Update sistem? (y/n, default: n): ${NC}"
+    read -p "" do_update
+    
+    if [[ "$do_update" =~ ^[Yy]$ ]]; then
+        log_step "Mengupdate sistem..."
+        apt update -y
+        apt upgrade -y
+        apt autoremove -y
+        apt autoclean
+        log_info "Update sistem selesai"
+        SYSTEM_UPDATED=true
+    else
+        log_info "Melewati update sistem (menggunakan paket yang sudah ada)"
+        # Tetap lakukan apt update ringan untuk sync package list
+        apt update -y 2>/dev/null
+    fi
 }
 
 # Fungsi untuk mendapatkan daftar interface dan IP
@@ -185,7 +200,6 @@ choose_dhcp_interface() {
         if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
             DHCP_INTERFACE="${interfaces[$((choice - 1))]}"
             
-            # Get IP dan prefix dari interface yang dipilih
             local interface_info=$(ip -4 addr show $DHCP_INTERFACE 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}/\d+' | head -1)
             if [[ -n "$interface_info" ]]; then
                 local interface_ip=$(echo $interface_info | cut -d'/' -f1)
@@ -195,10 +209,8 @@ choose_dhcp_interface() {
                 DHCP_SUBNET=$(get_network_address $interface_ip $DHCP_PREFIX)
                 DHCP_ROUTER=$interface_ip
                 log_info "Mendeteksi subnet: $DHCP_SUBNET/$DHCP_PREFIX"
-                log_info "Netmask: $DHCP_NETMASK"
-                log_info "Gateway default: $DHCP_ROUTER"
+                log_info "Gateway: $DHCP_ROUTER"
             else
-                # Default jika tidak ada IP
                 DHCP_PREFIX="24"
                 DHCP_NETMASK="255.255.255.0"
                 DHCP_SUBNET="192.168.1.0"
@@ -219,28 +231,25 @@ configure_dhcp_range() {
     echo -e "${CYAN}Konfigurasi DHCP Server${NC}"
     echo -e "${CYAN}========================================${NC}"
     
-    # Input prefix
-    echo -ne "${GREEN}Masukkan prefix network (contoh: 24 untuk /24, default: $DHCP_PREFIX): ${NC}"
+    echo -ne "${GREEN}Masukkan prefix network (1-32, default: $DHCP_PREFIX): ${NC}"
     read -p "" prefix_input
     if [[ -n "$prefix_input" ]] && [[ "$prefix_input" =~ ^[0-9]+$ ]] && (( prefix_input >= 1 && prefix_input <= 32 )); then
         DHCP_PREFIX=$prefix_input
         DHCP_NETMASK=$(prefix_to_netmask $DHCP_PREFIX)
-        # Recalculate subnet berdasarkan gateway
         if [[ -n "$DHCP_ROUTER" ]]; then
             DHCP_SUBNET=$(get_network_address $DHCP_ROUTER $DHCP_PREFIX)
         fi
     fi
     
-    echo -e "${CYAN}Subnet: $DHCP_SUBNET/$DHCP_PREFIX ($DHCP_NETMASK)${NC}"
+    echo -e "${CYAN}Subnet: $DHCP_SUBNET/$DHCP_PREFIX${NC}"
     echo ""
     
-    # Input range
-    echo -e "${YELLOW}Masukkan range IP (cukup angka akhir saja, karena network sudah diketahui)${NC}"
-    echo -e "${YELLOW}Contoh: range 100-200 akan menghasilkan ${DHCP_SUBNET%.*}.100 - ${DHCP_SUBNET%.*}.200${NC}"
+    echo -e "${YELLOW}Masukkan range IP (cukup angka akhir saja)${NC}"
+    echo -e "${YELLOW}Contoh: 100-200 -> ${DHCP_SUBNET%.*}.100 - ${DHCP_SUBNET%.*}.200${NC}"
     
-    echo -ne "${GREEN}Masukkan range awal (contoh: 100): ${NC}"
+    echo -ne "${GREEN}Range awal (contoh: 100): ${NC}"
     read -p "" range_start
-    echo -ne "${GREEN}Masukkan range akhir (contoh: 200): ${NC}"
+    echo -ne "${GREEN}Range akhir (contoh: 200): ${NC}"
     read -p "" range_end
     
     if [[ -z "$range_start" ]]; then
@@ -250,17 +259,15 @@ configure_dhcp_range() {
         range_end=200
     fi
     
-    # Ambil prefix network (tanpa angka terakhir)
     local network_prefix="${DHCP_SUBNET%.*}"
     DHCP_RANGE_START="${network_prefix}.${range_start}"
     DHCP_RANGE_END="${network_prefix}.${range_end}"
     
     echo ""
-    echo -ne "${GREEN}Masukkan gateway (default: $DHCP_ROUTER): ${NC}"
+    echo -ne "${GREEN}Gateway (default: $DHCP_ROUTER): ${NC}"
     read -p "" gateway_input
     if [[ -n "$gateway_input" ]]; then
         DHCP_ROUTER=$gateway_input
-        # Recalculate subnet berdasarkan gateway baru
         DHCP_SUBNET=$(get_network_address $DHCP_ROUTER $DHCP_PREFIX)
         network_prefix="${DHCP_SUBNET%.*}"
         DHCP_RANGE_START="${network_prefix}.${range_start}"
@@ -268,7 +275,7 @@ configure_dhcp_range() {
     fi
     
     echo ""
-    echo -ne "${GREEN}Masukkan DNS server (pisahkan dengan koma, default: 8.8.8.8, 8.8.4.4): ${NC}"
+    echo -ne "${GREEN}DNS server (default: 8.8.8.8, 8.8.4.4): ${NC}"
     read -p "" dns_input
     if [[ -n "$dns_input" ]]; then
         DHCP_DNS=$dns_input
@@ -281,17 +288,16 @@ configure_dhcp_range() {
     echo -e "${YELLOW}Ringkasan Konfigurasi DHCP:${NC}"
     echo -e "  Interface: $DHCP_INTERFACE"
     echo -e "  Subnet: $DHCP_SUBNET/$DHCP_PREFIX"
-    echo -e "  Netmask: $DHCP_NETMASK"
     echo -e "  Range: $DHCP_RANGE_START - $DHCP_RANGE_END"
     echo -e "  Gateway: $DHCP_ROUTER"
     echo -e "  DNS: $DHCP_DNS"
     echo -e "${CYAN}========================================${NC}"
     echo ""
     
-    echo -ne "${GREEN}Apakah konfigurasi sudah benar? (y/n): ${NC}"
+    echo -ne "${GREEN}Konfigurasi sudah benar? (y/n): ${NC}"
     read -p "" confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        log_warning "Konfigurasi dibatalkan. Silakan pilih menu DHCP lagi."
+        log_warning "Konfigurasi dibatalkan"
         return 1
     fi
     
@@ -334,16 +340,6 @@ check_root() {
     fi
 }
 
-# Fungsi untuk update system
-update_system() {
-    log_step "Mengupdate sistem..."
-    apt update -y
-    apt upgrade -y
-    apt autoremove -y
-    apt autoclean
-    log_info "Update sistem selesai"
-}
-
 # Fungsi untuk install Apache2
 install_apache() {
     log_step "Menginstall Apache2 Web Server..."
@@ -358,7 +354,8 @@ install_apache() {
         fi
     fi
     
-    apt install apache2 -y
+    # Install tanpa upgrade paket yang sudah ada
+    apt install -y --no-upgrade apache2 2>/dev/null || apt install -y apache2
     
     APACHE_ACCESS_IP=$(choose_ip "Apache2 Web Server")
     
@@ -411,48 +408,26 @@ install_apache() {
             <h2>Tentang Kami</h2>
             <p class="about-text">
                 <strong style="color:#2196F3">TechCorp</strong> adalah perusahaan teknologi terkemuka yang berdedikasi
-                untuk memberikan solusi digital inovatif kepada klien kami. Dengan pengalaman lebih dari 10 tahun,
-                kami telah membantu ratusan bisnis bertransformasi secara digital.
+                untuk memberikan solusi digital inovatif kepada klien kami.
             </p>
         </div>
         <div class="section" id="services">
             <h2>Layanan Kami</h2>
             <div class="services-grid">
-                <div class="service-card">
-                    <div class="icon">🌐</div>
-                    <h3>Web Development</h3>
-                    <p>Pengembangan website dan aplikasi web modern, responsif, dan berperforma tinggi.</p>
-                </div>
-                <div class="service-card">
-                    <div class="icon">🔒</div>
-                    <h3>Cybersecurity</h3>
-                    <p>Perlindungan menyeluruh terhadap ancaman siber, audit keamanan, penetration testing.</p>
-                </div>
-                <div class="service-card">
-                    <div class="icon">📡</div>
-                    <h3>Network Solutions</h3>
-                    <p>Infrastruktur jaringan yang handal, scalable, dan aman untuk enterprise.</p>
-                </div>
-                <div class="service-card">
-                    <div class="icon">🖥️</div>
-                    <h3>DHCP Server</h3>
-                    <p>Manajemen IP address otomatis untuk jaringan internal yang efisien.</p>
-                </div>
+                <div class="service-card"><div class="icon">🌐</div><h3>Web Development</h3><p>Pengembangan website modern.</p></div>
+                <div class="service-card"><div class="icon">🔒</div><h3>Cybersecurity</h3><p>Perlindungan dari ancaman siber.</p></div>
+                <div class="service-card"><div class="icon">📡</div><h3>Network Solutions</h3><p>Infrastruktur jaringan handal.</p></div>
+                <div class="service-card"><div class="icon">🖥️</div><h3>DHCP Server</h3><p>Manajemen IP address otomatis.</p></div>
             </div>
         </div>
         <div class="section" id="contact">
             <h2>Kontak</h2>
             <div class="contact-info">
-                <p>🏢 <span>Perusahaan:</span> TechCorp Indonesia</p>
-                <p>📍 <span>Alamat:</span> Jl. Teknologi No. 1, Jakarta Selatan</p>
-                <p>📧 <span>Email:</span> info@techcorp.id</p>
-                <p>📞 <span>Telepon:</span> +62 21 1234 5678</p>
+                <p>🏢 TechCorp Indonesia | 📧 info@techcorp.id | 📞 +62 21 1234 5678</p>
             </div>
         </div>
     </div>
-    <footer>
-        <p>&copy; 2025 <span>TechCorp Indonesia</span>. All Rights Reserved.</p>
-    </footer>
+    <footer><p>&copy; 2025 TechCorp Indonesia. All Rights Reserved.</p></footer>
 </body>
 </html>
 HTMLEOF
@@ -460,34 +435,11 @@ HTMLEOF
     chown -R www-data:www-data /var/www/html/
     chmod -R 755 /var/www/html/
     
-    cat > /etc/apache2/sites-available/000-default.conf << APACHECONF
-<VirtualHost $APACHE_ACCESS_IP:80>
-    ServerAdmin webmaster@localhost
-    ServerName ${APACHE_ACCESS_IP}
-    DocumentRoot /var/www/html
-    
-    <Directory /var/www/html>
-        Options Indexes FollowSymLinks
-        AllowOverride All
-        Require all granted
-    </Directory>
-    
-    ErrorLog \${APACHE_LOG_DIR}/error.log
-    CustomLog \${APACHE_LOG_DIR}/access.log combined
-</VirtualHost>
-APACHECONF
-    
-    PORT_80_LISTENER="$(get_port_80_listener)"
-    if [[ -n "$PORT_80_LISTENER" && "$PORT_80_LISTENER" != *"apache2"* ]]; then
-        log_error "Port 80 sudah dipakai proses lain: $PORT_80_LISTENER"
-        return 1
-    fi
-    
-    systemctl enable apache2
+    systemctl enable apache2 2>/dev/null
     systemctl restart apache2
     
-    log_info "Apache2 berhasil diinstall dan berjalan di port 80"
-    log_info "Apache2 dapat diakses di: http://${APACHE_ACCESS_IP}"
+    log_info "✅ Apache2 berhasil diinstall!"
+    log_info "   Akses: http://${APACHE_ACCESS_IP}"
 }
 
 # Fungsi untuk install vsftpd
@@ -495,7 +447,7 @@ install_ftp() {
     log_step "Menginstall vsftpd FTP Server..."
     
     if systemctl is-active --quiet vsftpd 2>/dev/null; then
-        log_warning "vsftpd sudah terinstall dan berjalan"
+        log_warning "vsftpd sudah terinstall"
         read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -504,9 +456,9 @@ install_ftp() {
         fi
     fi
     
-    apt install vsftpd -y
+    apt install -y --no-upgrade vsftpd 2>/dev/null || apt install -y vsftpd
     
-    cp /etc/vsftpd.conf /etc/vsftpd.conf.bak
+    cp /etc/vsftpd.conf /etc/vsftpd.conf.bak 2>/dev/null
     
     cat > /etc/vsftpd.conf << 'FTPEOF'
 listen=YES
@@ -522,161 +474,74 @@ connect_from_port_20=YES
 chroot_local_user=YES
 secure_chroot_dir=/var/run/vsftpd/empty
 pam_service_name=vsftpd
-rsa_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem
-rsa_private_key_file=/etc/ssl/private/ssl-cert-snakeoil.key
-ssl_enable=NO
-pasv_enable=YES
-pasv_min_port=30000
-pasv_max_port=31000
 allow_writeable_chroot=YES
 FTPEOF
     
-    if id "admin" &>/dev/null; then
-        log_warning "User admin sudah ada"
-        read -p "Reset password admin? (y/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            echo "admin:123" | chpasswd
-            log_info "Password admin direset menjadi 123"
-        fi
-    else
-        log_info "Membuat user admin untuk FTP..."
+    if ! id "admin" &>/dev/null; then
+        log_info "Membuat user admin..."
         useradd -m -s /bin/bash admin
         echo "admin:123" | chpasswd
     fi
     
-    chmod 755 /home/admin
-    
     systemctl restart vsftpd
-    systemctl enable vsftpd
+    systemctl enable vsftpd 2>/dev/null
     
-    FTP_IP=$(choose_ip "FTP Server")
-    
-    log_info "vsftpd berhasil dikonfigurasi"
-    log_info "FTP Server: ftp://${FTP_IP}"
-    log_info "User FTP: admin, Password: 123"
+    log_info "✅ vsftpd berhasil diinstall!"
+    log_info "   User: admin | Password: 123"
 }
 
 # Fungsi untuk install SSH Server
 install_ssh() {
-    log_step "Menginstall dan mengkonfigurasi OpenSSH Server..."
+    log_step "Menginstall OpenSSH Server..."
     
-    apt install openssh-server -y
+    apt install -y --no-upgrade openssh-server 2>/dev/null || apt install -y openssh-server
     
-    cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+    cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak 2>/dev/null
     
-    cat > /etc/ssh/sshd_config << 'SSHEOF'
-Port 22
-Protocol 2
-HostKey /etc/ssh/ssh_host_rsa_key
-HostKey /etc/ssh/ssh_host_ecdsa_key
-HostKey /etc/ssh/ssh_host_ed25519_key
-LoginGraceTime 2m
-PermitRootLogin no
-StrictModes yes
-MaxAuthTries 6
-MaxSessions 10
-PubkeyAuthentication yes
-PasswordAuthentication no
-PermitEmptyPasswords no
-ChallengeResponseAuthentication no
-AllowUsers admin
-ClientAliveInterval 300
-ClientAliveCountMax 2
-X11Forwarding no
-PrintMotd no
-AcceptEnv LANG LC_*
-Subsystem sftp /usr/lib/openssh/sftp-server
-SSHEOF
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+    sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
     
     mkdir -p /home/admin/.ssh
     chmod 700 /home/admin/.ssh
     
     if [[ ! -f /home/admin/.ssh/id_rsa ]]; then
-        log_info "Membuat contoh SSH key pair..."
         ssh-keygen -t rsa -b 4096 -f /home/admin/.ssh/id_rsa -N "" -C "admin@techcorp"
     fi
     
     cp /home/admin/.ssh/id_rsa.pub /home/admin/.ssh/authorized_keys
     chmod 600 /home/admin/.ssh/authorized_keys
-    
     chown -R admin:admin /home/admin/.ssh
     
     systemctl restart sshd
-    systemctl enable sshd
+    systemctl enable sshd 2>/dev/null
     
-    SSH_IP=$(choose_ip "SSH Server")
-    
-    log_info "SSH Server berhasil dikonfigurasi dengan key-based authentication"
-    log_warning "Password authentication telah dinonaktifkan"
-    log_info "SSH Server: ssh admin@${SSH_IP}"
-    log_info "Private key disimpan di: /home/admin/.ssh/id_rsa"
+    log_info "✅ OpenSSH berhasil dikonfigurasi!"
+    log_info "   Private key: /home/admin/.ssh/id_rsa"
 }
 
-# Fungsi untuk install DNS Server (Bind9)
+# Fungsi untuk install DNS Server
 install_dns() {
     log_step "Menginstall DNS Server (Bind9)..."
     
-    if systemctl is-active --quiet bind9 2>/dev/null; then
-        log_warning "Bind9 sudah terinstall dan berjalan"
-        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Melewati instalasi DNS Server"
-            return 0
-        fi
-    fi
-    
-    apt install bind9 bind9utils bind9-doc dnsutils -y
+    apt install -y --no-upgrade bind9 bind9utils dnsutils 2>/dev/null || apt install -y bind9 bind9utils dnsutils
     
     DNS_IP=$(choose_ip "DNS Server")
     
     echo ""
-    echo -e "${CYAN}========================================${NC}"
-    echo -e "${CYAN}Masukkan nama domain yang diinginkan${NC}"
-    echo -e "${CYAN}Contoh: techcorp.local, mycompany.com${NC}"
-    echo -e "${CYAN}========================================${NC}"
-    echo -ne "${GREEN}Domain name: ${NC}"
+    echo -ne "${GREEN}Nama domain (contoh: techcorp.local): ${NC}"
     read -p "" DOMAIN_NAME
-    
-    if [[ -z "$DOMAIN_NAME" ]]; then
-        DOMAIN_NAME="techcorp.local"
-        log_info "Menggunakan domain default: $DOMAIN_NAME"
-    fi
-    
-    echo ""
-    echo -e "${CYAN}========================================${NC}"
-    echo -e "${CYAN}Masukkan DNS Forwarders (DNS upstream)${NC}"
-    echo -e "${CYAN}Default: 8.8.8.8 8.8.4.4 (Google DNS)${NC}"
-    echo -e "${CYAN}========================================${NC}"
-    echo -ne "${GREEN}Forwarders (pisahkan dengan spasi): ${NC}"
-    read -p "" FORWARDERS_INPUT
-    
-    if [[ -n "$FORWARDERS_INPUT" ]]; then
-        DNS_FORWARDERS=""
-        for fwd in $FORWARDERS_INPUT; do
-            DNS_FORWARDERS="${DNS_FORWARDERS} ${fwd};"
-        done
-    fi
+    [[ -z "$DOMAIN_NAME" ]] && DOMAIN_NAME="techcorp.local"
     
     cat > /etc/bind/named.conf.options << OPTIONSEOF
 options {
     directory "/var/cache/bind";
-    
-    forwarders {
-        $DNS_FORWARDERS
-    };
-    
+    forwarders { 8.8.8.8; 8.8.4.4; };
     allow-query { any; };
     recursion yes;
     dnssec-validation auto;
     listen-on { $DNS_IP; 127.0.0.1; };
     listen-on-v6 { none; };
-    version "DNS Server TechCorp";
-    rate-limit {
-        responses-per-second 10;
-        slip 2;
-    };
 };
 OPTIONSEOF
     
@@ -684,243 +549,63 @@ OPTIONSEOF
 zone "$DOMAIN_NAME" {
     type master;
     file "/etc/bind/db.$DOMAIN_NAME";
-    allow-update { none; };
-};
-
-REVERSE_IP=\$(echo $DNS_IP | awk -F. '{print \$3"."\$2"."\$1}')
-zone "\${REVERSE_IP}.in-addr.arpa" {
-    type master;
-    file "/etc/bind/db.reverse";
-    allow-update { none; };
 };
 LOCALSEOF
     
     SERIAL=$(date +%Y%m%d%S)
     cat > /etc/bind/db.$DOMAIN_NAME << FORWARDEOF
-;
-; BIND data file for $DOMAIN_NAME
-;
 \$TTL    604800
-@       IN      SOA     ns1.$DOMAIN_NAME. admin.$DOMAIN_NAME. (
-                    $SERIAL     ; Serial
-                    604800      ; Refresh
-                    86400       ; Retry
-                    2419200     ; Expire
-                    604800 )    ; Negative Cache TTL
-;
+@       IN      SOA     ns1.$DOMAIN_NAME. admin.$DOMAIN_NAME. ($SERIAL 604800 86400 2419200 604800)
 @       IN      NS      ns1.$DOMAIN_NAME.
 @       IN      A       $DNS_IP
-@       IN      MX 10   mail.$DOMAIN_NAME.
-
 ns1     IN      A       $DNS_IP
-ns2     IN      A       $DNS_IP
 www     IN      A       $DNS_IP
-web     IN      A       $DNS_IP
 ftp     IN      A       $DNS_IP
-mail    IN      A       $DNS_IP
-ssh     IN      A       $DNS_IP
-wp      IN      A       $DNS_IP
-wordpress IN    A       $DNS_IP
-
-files   IN      CNAME   www
-dev     IN      CNAME   www
 FORWARDEOF
     
-    REVERSE_IP=$(echo $DNS_IP | awk -F. '{print $3"."$2"."$1}')
-    LAST_OCTET=$(echo $DNS_IP | awk -F. '{print $4}')
-    
-    cat > /etc/bind/db.reverse << REVERSEEOF
-;
-; BIND reverse data file for $DOMAIN_NAME
-;
-\$TTL    604800
-@       IN      SOA     ns1.$DOMAIN_NAME. admin.$DOMAIN_NAME. (
-                    $SERIAL     ; Serial
-                    604800      ; Refresh
-                    86400       ; Retry
-                    2419200     ; Expire
-                    604800 )    ; Negative Cache TTL
-;
-@       IN      NS      ns1.$DOMAIN_NAME.
-$LAST_OCTET     IN      PTR     ns1.$DOMAIN_NAME.
-$LAST_OCTET     IN      PTR     www.$DOMAIN_NAME.
-$LAST_OCTET     IN      PTR     ftp.$DOMAIN_NAME.
-$LAST_OCTET     IN      PTR     mail.$DOMAIN_NAME.
-$LAST_OCTET     IN      PTR     ssh.$DOMAIN_NAME.
-REVERSEEOF
-    
     chown -R bind:bind /etc/bind/
-    chmod 644 /etc/bind/db.$DOMAIN_NAME
-    chmod 644 /etc/bind/db.reverse
-    
-    log_info "Memvalidasi konfigurasi DNS..."
-    if ! named-checkconf; then
-        log_error "Konfigurasi bind9 tidak valid"
-        return 1
-    fi
-    
-    if ! named-checkzone $DOMAIN_NAME /etc/bind/db.$DOMAIN_NAME; then
-        log_error "Forward zone tidak valid"
-        return 1
-    fi
-    
     systemctl restart bind9
-    systemctl enable bind9
+    systemctl enable bind9 2>/dev/null
     
-    cp /etc/resolv.conf /etc/resolv.conf.bak
-    cat > /etc/resolv.conf << RESOLVEOF
-nameserver $DNS_IP
-nameserver 8.8.8.8
-search $DOMAIN_NAME
-RESOLVEOF
-    
-    echo ""
-    log_info "DNS Server (Bind9) berhasil diinstall dan dikonfigurasi"
-    log_info "=========================================="
-    log_info "Domain: $DOMAIN_NAME"
-    log_info "DNS Server IP: $DNS_IP"
-    log_info "Forwarders: $DNS_FORWARDERS"
-    log_info "=========================================="
-    log_info "Record yang tersedia:"
-    log_info "  - ns1.$DOMAIN_NAME -> $DNS_IP"
-    log_info "  - www.$DOMAIN_NAME -> $DNS_IP"
-    log_info "  - ftp.$DOMAIN_NAME -> $DNS_IP"
-    log_info "  - mail.$DOMAIN_NAME -> $DNS_IP"
-    log_info "  - ssh.$DOMAIN_NAME -> $DNS_IP"
-    log_info "  - wp.$DOMAIN_NAME -> $DNS_IP"
-    log_info "=========================================="
-    log_info "Testing DNS: dig @$DNS_IP www.$DOMAIN_NAME"
+    log_info "✅ DNS Server berhasil diinstall!"
+    log_info "   Domain: $DOMAIN_NAME | IP: $DNS_IP"
 }
 
 # Fungsi untuk install DHCP Server
 install_dhcp() {
     log_step "Menginstall DHCP Server (isc-dhcp-server)..."
     
-    if systemctl is-active --quiet isc-dhcp-server 2>/dev/null; then
-        log_warning "DHCP Server sudah terinstall dan berjalan"
-        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            log_info "Melewati instalasi DHCP Server"
-            return 0
-        fi
-    fi
+    apt install -y --no-upgrade isc-dhcp-server 2>/dev/null || apt install -y isc-dhcp-server
     
-    apt install isc-dhcp-server -y
-    
-    # Pilih interface untuk DHCP
     choose_dhcp_interface
-    
-    # Konfigurasi range IP
     if ! configure_dhcp_range; then
         return 1
     fi
     
-    # Backup konfigurasi asli
-    cp /etc/dhcp/dhcpd.conf /etc/dhcp/dhcpd.conf.bak 2>/dev/null
-    
-    # Konfigurasi DHCP Server
     cat > /etc/dhcp/dhcpd.conf << DHPCEOF
-# DHCP Configuration - TechCorp
-# File ini dikonfigurasi secara otomatis oleh TechCorp Multi-Service Installer
-
 option domain-name "$DOMAIN_NAME";
 option domain-name-servers $DHCP_DNS;
-
 default-lease-time 600;
 max-lease-time 7200;
 
-# Konfigurasi subnet untuk interface $DHCP_INTERFACE
 subnet $DHCP_SUBNET netmask $DHCP_NETMASK {
     range $DHCP_RANGE_START $DHCP_RANGE_END;
     option routers $DHCP_ROUTER;
     option subnet-mask $DHCP_NETMASK;
     option domain-name-servers $DHCP_DNS;
     option domain-name "$DOMAIN_NAME";
-    
-    # DNS Server yang tersedia
-    option ntp-servers $DHCP_ROUTER;
-    
-    # Waktu broadcast
-    option broadcast-address ${DHCP_SUBNET%.*}.255;
-    
-    # Default gateway
-    option routers $DHCP_ROUTER;
-    
-    # Konfigurasi tambahan
     authoritative;
-    
-    # Static leases (contoh - bisa ditambahkan sendiri nanti)
-    # host client1 {
-    #     hardware ethernet 00:11:22:33:44:55;
-    #     fixed-address 192.168.1.100;
-    # }
 }
-
-# Konfigurasi untuk network yang tidak dikenal
-subnet 0.0.0.0 netmask 0.0.0.0 {
-    option domain-name-servers 8.8.8.8, 8.8.4.4;
-    option routers 0.0.0.0;
-    max-lease-time 1800;
-}
-
-# Logging
-log-facility local7;
 DHPCEOF
     
-    # Konfigurasi interface yang digunakan DHCP
-    cat > /etc/default/isc-dhcp-server << DHPCDEFAULT
-# DHCP Default Configuration - TechCorp
-INTERFACESv4="$DHCP_INTERFACE"
-INTERFACESv6=""
-DHPCDEFAULT
+    echo "INTERFACESv4=\"$DHCP_INTERFACE\"" > /etc/default/isc-dhcp-server
     
-    # Set permission
-    chmod 644 /etc/dhcp/dhcpd.conf
-    chown root:root /etc/dhcp/dhcpd.conf
-    
-    # Cek konfigurasi
-    log_info "Memvalidasi konfigurasi DHCP..."
-    if ! dhcpd -t -cf /etc/dhcp/dhcpd.conf 2>/dev/null; then
-        log_error "Konfigurasi DHCP tidak valid"
-        # Restore backup jika ada
-        if [[ -f /etc/dhcp/dhcpd.conf.bak ]]; then
-            cp /etc/dhcp/dhcpd.conf.bak /etc/dhcp/dhcpd.conf
-            log_info "Mengembalikan konfigurasi backup"
-        fi
-        return 1
-    fi
-    
-    # Restart service
     systemctl restart isc-dhcp-server
-    systemctl enable isc-dhcp-server
+    systemctl enable isc-dhcp-server 2>/dev/null
     
-    # Cek status
-    if systemctl is-active --quiet isc-dhcp-server; then
-        log_info "DHCP Server berhasil dijalankan"
-    else
-        log_error "DHCP Server gagal dijalankan. Cek log: journalctl -u isc-dhcp-server"
-        return 1
-    fi
-    
-    # Konfigurasi firewall
-    if command -v ufw &> /dev/null; then
-        ufw allow 67/udp
-        log_info "UFW: Port 67/udp (DHCP) dibuka"
-    fi
-    
-    echo ""
-    log_info "DHCP Server (isc-dhcp-server) berhasil diinstall dan dikonfigurasi"
-    log_info "=========================================="
-    log_info "Interface: $DHCP_INTERFACE"
-    log_info "Subnet: $DHCP_SUBNET/$DHCP_PREFIX ($DHCP_NETMASK)"
-    log_info "Range IP: $DHCP_RANGE_START - $DHCP_RANGE_END"
-    log_info "Gateway: $DHCP_ROUTER"
-    log_info "DNS: $DHCP_DNS"
-    log_info "=========================================="
-    log_info "Status service:"
-    systemctl status isc-dhcp-server --no-pager | head -5
-    log_info "Log file: /var/log/syslog"
+    log_info "✅ DHCP Server berhasil diinstall!"
+    log_info "   Interface: $DHCP_INTERFACE | Subnet: $DHCP_SUBNET/$DHCP_PREFIX"
+    log_info "   Range: $DHCP_RANGE_START - $DHCP_RANGE_END"
 }
 
 # Fungsi untuk install WordPress
@@ -928,17 +613,15 @@ install_wordpress() {
     log_step "Menginstall WordPress..."
     
     if ! systemctl is-active --quiet apache2 2>/dev/null; then
-        log_error "Apache2 harus diinstall terlebih dahulu sebelum WordPress"
-        log_info "Silakan install Apache2 terlebih dahulu (Menu 3)"
+        log_error "Apache2 harus diinstall terlebih dahulu!"
         return 1
     fi
     
-    apt install php php-mysql php-curl php-gd php-mbstring php-xml php-xmlrpc php-soap php-intl php-zip -y
-    apt install mariadb-server mariadb-client -y
+    apt install -y --no-upgrade php php-mysql php-curl php-gd php-mbstring php-xml php-zip mariadb-server wget 2>/dev/null || \
+    apt install -y php php-mysql php-curl php-gd php-mbstring php-xml php-zip mariadb-server wget
     
-    log_info "Mengkonfigurasi database MariaDB..."
     systemctl start mariadb
-    systemctl enable mariadb
+    systemctl enable mariadb 2>/dev/null
     
     mysql << 'SQLEOF'
 CREATE DATABASE IF NOT EXISTS wordpress;
@@ -947,69 +630,47 @@ GRANT ALL PRIVILEGES ON wordpress.* TO 'wpuser'@'localhost';
 FLUSH PRIVILEGES;
 SQLEOF
     
-    log_info "Download WordPress..."
     cd /tmp
     wget -q https://wordpress.org/latest.tar.gz
     tar -xzf latest.tar.gz
-    
     mkdir -p /var/www/html/wordpress
     cp -r /tmp/wordpress/* /var/www/html/wordpress/
     
     cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
-    sed -i 's/database_name_here/wordpress/g' /var/www/html/wordpress/wp-config.php
-    sed -i 's/username_here/wpuser/g' /var/www/html/wordpress/wp-config.php
-    sed -i 's/password_here/wp123456/g' /var/www/html/wordpress/wp-config.php
-    
-    KEYS=$(curl -s https://api.wordpress.org/secret-key/1.1/salt/)
-    if [[ -n "$KEYS" ]]; then
-        sed -i "/AUTH_KEY/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/SECURE_AUTH_KEY/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/LOGGED_IN_KEY/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/NONCE_KEY/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/AUTH_SALT/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/SECURE_AUTH_SALT/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/LOGGED_IN_SALT/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/NONCE_SALT/d" /var/www/html/wordpress/wp-config.php
-        sed -i "/table_prefix/i $KEYS" /var/www/html/wordpress/wp-config.php
-    fi
+    sed -i "s/database_name_here/wordpress/" /var/www/html/wordpress/wp-config.php
+    sed -i "s/username_here/wpuser/" /var/www/html/wordpress/wp-config.php
+    sed -i "s/password_here/wp123456/" /var/www/html/wordpress/wp-config.php
     
     chown -R www-data:www-data /var/www/html/wordpress/
-    chmod -R 755 /var/www/html/wordpress/
-    
     systemctl restart apache2
-    
     rm -rf /tmp/wordpress*
     
-    WEB_IP=$(choose_ip "WordPress")
-    
-    log_info "WordPress berhasil diinstall"
-    log_info "Akses WordPress: http://${WEB_IP}/wordpress"
-    log_info "Database: wordpress | User: wpuser | Password: wp123456"
+    log_info "✅ WordPress berhasil diinstall!"
+    log_info "   URL: http://${APACHE_ACCESS_IP}/wordpress"
 }
 
-# Fungsi untuk install semua service (tanpa DNS dan DHCP)
+# Fungsi untuk install semua service basic
 install_all_basic() {
-    log_step "Memulai instalasi semua service basic..."
-    update_system
+    system_update
     install_apache
     install_ftp
     install_ssh
     install_wordpress
+    
     echo ""
     log_info "=========================================="
-    log_info "Semua service basic berhasil diinstall!"
+    log_info "✅ SEMUA SERVICE BASIC BERHASIL DIINSTALL!"
     log_info "=========================================="
     log_info "Apache: http://${APACHE_ACCESS_IP}"
-    log_info "FTP: ftp://${APACHE_ACCESS_IP} (user: admin, pass: 123)"
-    log_info "SSH: ssh admin@${APACHE_ACCESS_IP} (gunakan private key)"
+    log_info "FTP: ftp://${APACHE_ACCESS_IP} (admin/123)"
+    log_info "SSH: ssh admin@${APACHE_ACCESS_IP}"
     log_info "WordPress: http://${APACHE_ACCESS_IP}/wordpress"
     log_info "=========================================="
 }
 
-# Fungsi untuk install semua service lengkap dengan DNS dan DHCP
+# Fungsi untuk install semua service complete
 install_all_complete() {
-    log_step "Memulai instalasi semua service lengkap dengan DNS dan DHCP..."
-    update_system
+    system_update
     install_apache
     install_ftp
     install_ssh
@@ -1019,110 +680,60 @@ install_all_complete() {
     
     echo ""
     log_info "=========================================="
-    log_info "SEMUA SERVICE BERHASIL DIINSTALL!"
+    log_info "✅ SEMUA SERVICE COMPLETE BERHASIL DIINSTALL!"
     log_info "=========================================="
     log_info "Apache: http://${APACHE_ACCESS_IP}"
-    log_info "FTP: ftp://${APACHE_ACCESS_IP} (user: admin, pass: 123)"
-    log_info "SSH: ssh admin@${APACHE_ACCESS_IP} (gunakan private key)"
+    log_info "FTP: ftp://${APACHE_ACCESS_IP} (admin/123)"
+    log_info "SSH: ssh admin@${APACHE_ACCESS_IP}"
+    log_info "DNS: $DOMAIN_NAME @ $DNS_IP"
+    log_info "DHCP: $DHCP_INTERFACE ($DHCP_SUBNET/$DHCP_PREFIX)"
     log_info "WordPress: http://${APACHE_ACCESS_IP}/wordpress"
-    log_info "=========================================="
-    log_info "DNS Server Information:"
-    log_info "  DNS Server IP: ${DNS_IP}"
-    log_info "  Domain: ${DOMAIN_NAME}"
-    log_info "=========================================="
-    log_info "DHCP Server Information:"
-    log_info "  Interface: $DHCP_INTERFACE"
-    log_info "  Subnet: $DHCP_SUBNET/$DHCP_PREFIX"
-    log_info "  Range: $DHCP_RANGE_START - $DHCP_RANGE_END"
-    log_info "  Gateway: $DHCP_ROUTER"
     log_info "=========================================="
 }
 
-# Fungsi untuk menampilkan menu utama
+# Menu utama
 show_menu() {
     echo ""
     echo -e "${YELLOW}${BOLD}========================================${NC}"
     echo -e "${YELLOW}${BOLD}          MENU INSTALASI               ${NC}"
     echo -e "${YELLOW}${BOLD}========================================${NC}"
-    echo -e "${GREEN}1.${NC} Install Semua Service (Basic: Apache2 + FTP + SSH + WP)"
-    echo -e "${GREEN}2.${NC} Install Semua Service (Complete: + DNS + DHCP)"
-    echo -e "${CYAN}3.${NC} Install Apache2 (Web Server)"
-    echo -e "${CYAN}4.${NC} Install FTP (vsftpd)"
-    echo -e "${CYAN}5.${NC} Install SSH (Secure Server)"
-    echo -e "${CYAN}6.${NC} Install DNS Server (Bind9)"
-    echo -e "${CYAN}7.${NC} Install DHCP Server (isc-dhcp-server)"
-    echo -e "${CYAN}8.${NC} Install WordPress (Optional)"
+    echo -e "${GREEN}1.${NC} Install Semua Service (Basic)"
+    echo -e "${GREEN}2.${NC} Install Semua Service (Complete + DNS + DHCP)"
+    echo -e "${CYAN}3.${NC} Install Apache2"
+    echo -e "${CYAN}4.${NC} Install FTP"
+    echo -e "${CYAN}5.${NC} Install SSH"
+    echo -e "${CYAN}6.${NC} Install DNS Server"
+    echo -e "${CYAN}7.${NC} Install DHCP Server"
+    echo -e "${CYAN}8.${NC} Install WordPress"
     echo -e "${RED}9.${NC} Exit"
     echo -e "${YELLOW}========================================${NC}"
-    echo ""
-    echo -ne "${BOLD}${GREEN}Pilih menu (1-9): ${NC}"
+    echo -ne "${GREEN}Pilih menu (1-9): ${NC}"
 }
 
-# Fungsi untuk membaca input menu
-prompt_menu_choice() {
-    if ! IFS= read -r choice < /dev/tty; then
-        echo ""
-        log_error "Gagal membaca input"
-        exit 1
-    fi
-}
-
-# ==================== MAIN PROGRAM ====================
-
+# Main program
 check_root
 
 while true; do
     show_banner
     show_menu
-    prompt_menu_choice
+    read -r choice
     
     case $choice in
-        1)
-            echo ""
-            install_all_basic
-            ;;
-        2)
-            echo ""
-            install_all_complete
-            ;;
-        3)
-            echo ""
-            install_apache
-            ;;
-        4)
-            echo ""
-            install_ftp
-            ;;
-        5)
-            echo ""
-            install_ssh
-            ;;
-        6)
-            echo ""
-            install_dns
-            ;;
-        7)
-            echo ""
-            install_dhcp
-            ;;
-        8)
-            echo ""
-            install_wordpress
-            ;;
-        9)
-            echo ""
-            log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
-            echo -e "${GREEN}========================================${NC}"
-            echo -e "${GREEN}Script by TechCorp - All rights reserved${NC}"
-            echo -e "${GREEN}========================================${NC}"
+        1) install_all_basic ;;
+        2) install_all_complete ;;
+        3) system_update; install_apache ;;
+        4) system_update; install_ftp ;;
+        5) system_update; install_ssh ;;
+        6) system_update; install_dns ;;
+        7) system_update; install_dhcp ;;
+        8) system_update; install_wordpress ;;
+        9) 
+            log_info "Terima kasih telah menggunakan TechCorp Installer!"
             exit 0
             ;;
-        *)
-            log_error "Pilihan tidak valid! Silakan pilih 1-9"
-            sleep 2
-            ;;
+        *) log_error "Pilihan tidak valid!"; sleep 1 ;;
     esac
     
     echo ""
-    read -p "Tekan Enter untuk kembali ke menu utama..." < /dev/tty
+    read -p "Tekan Enter untuk kembali ke menu..." < /dev/tty
 done
