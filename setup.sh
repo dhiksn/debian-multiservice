@@ -3,7 +3,7 @@
 # =====================================================
 # Script: Multi-Service Installer for Debian
 # Author: TechCorp
-# Description: Install and configure Apache2, vsftpd, OpenSSH, DNS Server, and WordPress
+# Description: Install and configure Apache2, vsftpd, OpenSSH, DNS Server, DHCP Server, and WordPress
 # =====================================================
 
 # Warna untuk tampilan
@@ -20,6 +20,65 @@ BOLD='\033[1m'
 APACHE_ACCESS_IP=""
 DNS_FORWARDERS="8.8.8.8; 8.8.4.4;"
 DOMAIN_NAME=""
+DHCP_INTERFACE=""
+DHCP_SUBNET=""
+DHCP_PREFIX="24"
+DHCP_NETMASK="255.255.255.0"
+DHCP_RANGE_START=""
+DHCP_RANGE_END=""
+DHCP_ROUTER=""
+DHCP_DNS=""
+
+# Fungsi untuk konversi prefix ke netmask
+prefix_to_netmask() {
+    local prefix=$1
+    local mask=0
+    for i in $(seq 1 $prefix); do
+        mask=$(( (mask << 1) | 1 ))
+    done
+    for i in $(seq $((prefix + 1)) 32); do
+        mask=$((mask << 1))
+    done
+    printf "%d.%d.%d.%d" \
+        $(( (mask >> 24) & 255 )) \
+        $(( (mask >> 16) & 255 )) \
+        $(( (mask >> 8) & 255 )) \
+        $(( mask & 255 ))
+}
+
+# Fungsi untuk konversi netmask ke prefix
+netmask_to_prefix() {
+    local netmask=$1
+    local prefix=0
+    IFS=. read -r o1 o2 o3 o4 <<< "$netmask"
+    local mask=$(( (o1 << 24) + (o2 << 16) + (o3 << 8) + o4 ))
+    while (( mask & 0x80000000 )); do
+        prefix=$((prefix + 1))
+        mask=$((mask << 1))
+    done
+    echo $prefix
+}
+
+# Fungsi untuk menghitung network address dari IP dan prefix
+get_network_address() {
+    local ip=$1
+    local prefix=$2
+    IFS=. read -r i1 i2 i3 i4 <<< "$ip"
+    local ip_int=$(( (i1 << 24) + (i2 << 16) + (i3 << 8) + i4 ))
+    local mask_int=0
+    for i in $(seq 1 $prefix); do
+        mask_int=$(( (mask_int << 1) | 1 ))
+    done
+    for i in $(seq $((prefix + 1)) 32); do
+        mask_int=$((mask_int << 1))
+    done
+    local network_int=$((ip_int & mask_int))
+    printf "%d.%d.%d.%d" \
+        $(( (network_int >> 24) & 255 )) \
+        $(( (network_int >> 16) & 255 )) \
+        $(( (network_int >> 8) & 255 )) \
+        $(( network_int & 255 ))
+}
 
 # Fungsi untuk logging
 log_info() {
@@ -92,6 +151,153 @@ choose_ip() {
     done
 }
 
+# Fungsi untuk memilih interface untuk DHCP
+choose_dhcp_interface() {
+    local interfaces=()
+    local idx=1
+    local choice=""
+    
+    while IFS= read -r line; do
+        interfaces+=("$line")
+    done < <(ip -o link show | awk -F': ' '{print $2}' | grep -v lo)
+    
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}Pilih interface untuk DHCP Server:${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    for iface in "${interfaces[@]}"; do
+        local ip_addr=$(ip -4 addr show $iface 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+        local prefix=$(ip -4 addr show $iface 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}/\d+' | head -1 | cut -d'/' -f2)
+        if [[ -n "$ip_addr" ]]; then
+            echo -e "  ${YELLOW}${idx}.${NC} $iface -> $ip_addr/${prefix:-24}"
+        else
+            echo -e "  ${YELLOW}${idx}.${NC} $iface -> (no IP assigned)"
+        fi
+        idx=$((idx + 1))
+    done
+    
+    while true; do
+        echo -ne "${GREEN}Pilih interface [1-${#interfaces[@]}]: ${NC}"
+        if ! IFS= read -r choice < /dev/tty; then
+            choice=""
+        fi
+        
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#interfaces[@]} )); then
+            DHCP_INTERFACE="${interfaces[$((choice - 1))]}"
+            
+            # Get IP dan prefix dari interface yang dipilih
+            local interface_info=$(ip -4 addr show $DHCP_INTERFACE 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}/\d+' | head -1)
+            if [[ -n "$interface_info" ]]; then
+                local interface_ip=$(echo $interface_info | cut -d'/' -f1)
+                local detected_prefix=$(echo $interface_info | cut -d'/' -f2)
+                DHCP_PREFIX="${detected_prefix:-24}"
+                DHCP_NETMASK=$(prefix_to_netmask $DHCP_PREFIX)
+                DHCP_SUBNET=$(get_network_address $interface_ip $DHCP_PREFIX)
+                DHCP_ROUTER=$interface_ip
+                log_info "Mendeteksi subnet: $DHCP_SUBNET/$DHCP_PREFIX"
+                log_info "Netmask: $DHCP_NETMASK"
+                log_info "Gateway default: $DHCP_ROUTER"
+            else
+                # Default jika tidak ada IP
+                DHCP_PREFIX="24"
+                DHCP_NETMASK="255.255.255.0"
+                DHCP_SUBNET="192.168.1.0"
+                DHCP_ROUTER="192.168.1.1"
+                log_warning "Tidak ada IP terdeteksi, menggunakan default: $DHCP_SUBNET/$DHCP_PREFIX"
+            fi
+            return 0
+        fi
+        
+        log_error "Pilihan tidak valid."
+    done
+}
+
+# Fungsi untuk konfigurasi range DHCP
+configure_dhcp_range() {
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${CYAN}Konfigurasi DHCP Server${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    
+    # Input prefix
+    echo -ne "${GREEN}Masukkan prefix network (contoh: 24 untuk /24, default: $DHCP_PREFIX): ${NC}"
+    read -p "" prefix_input
+    if [[ -n "$prefix_input" ]] && [[ "$prefix_input" =~ ^[0-9]+$ ]] && (( prefix_input >= 1 && prefix_input <= 32 )); then
+        DHCP_PREFIX=$prefix_input
+        DHCP_NETMASK=$(prefix_to_netmask $DHCP_PREFIX)
+        # Recalculate subnet berdasarkan gateway
+        if [[ -n "$DHCP_ROUTER" ]]; then
+            DHCP_SUBNET=$(get_network_address $DHCP_ROUTER $DHCP_PREFIX)
+        fi
+    fi
+    
+    echo -e "${CYAN}Subnet: $DHCP_SUBNET/$DHCP_PREFIX ($DHCP_NETMASK)${NC}"
+    echo ""
+    
+    # Input range
+    echo -e "${YELLOW}Masukkan range IP (cukup angka akhir saja, karena network sudah diketahui)${NC}"
+    echo -e "${YELLOW}Contoh: range 100-200 akan menghasilkan ${DHCP_SUBNET%.*}.100 - ${DHCP_SUBNET%.*}.200${NC}"
+    
+    echo -ne "${GREEN}Masukkan range awal (contoh: 100): ${NC}"
+    read -p "" range_start
+    echo -ne "${GREEN}Masukkan range akhir (contoh: 200): ${NC}"
+    read -p "" range_end
+    
+    if [[ -z "$range_start" ]]; then
+        range_start=100
+    fi
+    if [[ -z "$range_end" ]]; then
+        range_end=200
+    fi
+    
+    # Ambil prefix network (tanpa angka terakhir)
+    local network_prefix="${DHCP_SUBNET%.*}"
+    DHCP_RANGE_START="${network_prefix}.${range_start}"
+    DHCP_RANGE_END="${network_prefix}.${range_end}"
+    
+    echo ""
+    echo -ne "${GREEN}Masukkan gateway (default: $DHCP_ROUTER): ${NC}"
+    read -p "" gateway_input
+    if [[ -n "$gateway_input" ]]; then
+        DHCP_ROUTER=$gateway_input
+        # Recalculate subnet berdasarkan gateway baru
+        DHCP_SUBNET=$(get_network_address $DHCP_ROUTER $DHCP_PREFIX)
+        network_prefix="${DHCP_SUBNET%.*}"
+        DHCP_RANGE_START="${network_prefix}.${range_start}"
+        DHCP_RANGE_END="${network_prefix}.${range_end}"
+    fi
+    
+    echo ""
+    echo -ne "${GREEN}Masukkan DNS server (pisahkan dengan koma, default: 8.8.8.8, 8.8.4.4): ${NC}"
+    read -p "" dns_input
+    if [[ -n "$dns_input" ]]; then
+        DHCP_DNS=$dns_input
+    else
+        DHCP_DNS="8.8.8.8, 8.8.4.4"
+    fi
+    
+    echo ""
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${YELLOW}Ringkasan Konfigurasi DHCP:${NC}"
+    echo -e "  Interface: $DHCP_INTERFACE"
+    echo -e "  Subnet: $DHCP_SUBNET/$DHCP_PREFIX"
+    echo -e "  Netmask: $DHCP_NETMASK"
+    echo -e "  Range: $DHCP_RANGE_START - $DHCP_RANGE_END"
+    echo -e "  Gateway: $DHCP_ROUTER"
+    echo -e "  DNS: $DHCP_DNS"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+    
+    echo -ne "${GREEN}Apakah konfigurasi sudah benar? (y/n): ${NC}"
+    read -p "" confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        log_warning "Konfigurasi dibatalkan. Silakan pilih menu DHCP lagi."
+        return 1
+    fi
+    
+    return 0
+}
+
 # Fungsi untuk mengecek port 80
 get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
@@ -99,7 +305,6 @@ get_port_80_listener() {
 
 # ─── Banner ──────────────────────────────────────────────────
 show_banner() {
-    clear
     echo -e "${BLUE}${BOLD}"
     cat << "EOF"
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -115,7 +320,7 @@ show_banner() {
 EOF
     echo -e "${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
-    echo -e "${YELLOW}${BOLD}         Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS${NC}"
+    echo -e "${YELLOW}${BOLD}      Multi-Service Installer | Apache2 + vsftpd + OpenSSH + DNS + DHCP${NC}"
     echo -e "${CYAN}${BOLD}====================================================================${NC}"
     echo ""
 }
@@ -226,6 +431,11 @@ install_apache() {
                     <div class="icon">📡</div>
                     <h3>Network Solutions</h3>
                     <p>Infrastruktur jaringan yang handal, scalable, dan aman untuk enterprise.</p>
+                </div>
+                <div class="service-card">
+                    <div class="icon">🖥️</div>
+                    <h3>DHCP Server</h3>
+                    <p>Manajemen IP address otomatis untuk jaringan internal yang efisien.</p>
                 </div>
             </div>
         </div>
@@ -581,6 +791,137 @@ RESOLVEOF
     log_info "Testing DNS: dig @$DNS_IP www.$DOMAIN_NAME"
 }
 
+# Fungsi untuk install DHCP Server
+install_dhcp() {
+    log_step "Menginstall DHCP Server (isc-dhcp-server)..."
+    
+    if systemctl is-active --quiet isc-dhcp-server 2>/dev/null; then
+        log_warning "DHCP Server sudah terinstall dan berjalan"
+        read -p "Apakah ingin reinstall? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "Melewati instalasi DHCP Server"
+            return 0
+        fi
+    fi
+    
+    apt install isc-dhcp-server -y
+    
+    # Pilih interface untuk DHCP
+    choose_dhcp_interface
+    
+    # Konfigurasi range IP
+    if ! configure_dhcp_range; then
+        return 1
+    fi
+    
+    # Backup konfigurasi asli
+    cp /etc/dhcp/dhcpd.conf /etc/dhcp/dhcpd.conf.bak 2>/dev/null
+    
+    # Konfigurasi DHCP Server
+    cat > /etc/dhcp/dhcpd.conf << DHPCEOF
+# DHCP Configuration - TechCorp
+# File ini dikonfigurasi secara otomatis oleh TechCorp Multi-Service Installer
+
+option domain-name "$DOMAIN_NAME";
+option domain-name-servers $DHCP_DNS;
+
+default-lease-time 600;
+max-lease-time 7200;
+
+# Konfigurasi subnet untuk interface $DHCP_INTERFACE
+subnet $DHCP_SUBNET netmask $DHCP_NETMASK {
+    range $DHCP_RANGE_START $DHCP_RANGE_END;
+    option routers $DHCP_ROUTER;
+    option subnet-mask $DHCP_NETMASK;
+    option domain-name-servers $DHCP_DNS;
+    option domain-name "$DOMAIN_NAME";
+    
+    # DNS Server yang tersedia
+    option ntp-servers $DHCP_ROUTER;
+    
+    # Waktu broadcast
+    option broadcast-address ${DHCP_SUBNET%.*}.255;
+    
+    # Default gateway
+    option routers $DHCP_ROUTER;
+    
+    # Konfigurasi tambahan
+    authoritative;
+    
+    # Static leases (contoh - bisa ditambahkan sendiri nanti)
+    # host client1 {
+    #     hardware ethernet 00:11:22:33:44:55;
+    #     fixed-address 192.168.1.100;
+    # }
+}
+
+# Konfigurasi untuk network yang tidak dikenal
+subnet 0.0.0.0 netmask 0.0.0.0 {
+    option domain-name-servers 8.8.8.8, 8.8.4.4;
+    option routers 0.0.0.0;
+    max-lease-time 1800;
+}
+
+# Logging
+log-facility local7;
+DHPCEOF
+    
+    # Konfigurasi interface yang digunakan DHCP
+    cat > /etc/default/isc-dhcp-server << DHPCDEFAULT
+# DHCP Default Configuration - TechCorp
+INTERFACESv4="$DHCP_INTERFACE"
+INTERFACESv6=""
+DHPCDEFAULT
+    
+    # Set permission
+    chmod 644 /etc/dhcp/dhcpd.conf
+    chown root:root /etc/dhcp/dhcpd.conf
+    
+    # Cek konfigurasi
+    log_info "Memvalidasi konfigurasi DHCP..."
+    if ! dhcpd -t -cf /etc/dhcp/dhcpd.conf 2>/dev/null; then
+        log_error "Konfigurasi DHCP tidak valid"
+        # Restore backup jika ada
+        if [[ -f /etc/dhcp/dhcpd.conf.bak ]]; then
+            cp /etc/dhcp/dhcpd.conf.bak /etc/dhcp/dhcpd.conf
+            log_info "Mengembalikan konfigurasi backup"
+        fi
+        return 1
+    fi
+    
+    # Restart service
+    systemctl restart isc-dhcp-server
+    systemctl enable isc-dhcp-server
+    
+    # Cek status
+    if systemctl is-active --quiet isc-dhcp-server; then
+        log_info "DHCP Server berhasil dijalankan"
+    else
+        log_error "DHCP Server gagal dijalankan. Cek log: journalctl -u isc-dhcp-server"
+        return 1
+    fi
+    
+    # Konfigurasi firewall
+    if command -v ufw &> /dev/null; then
+        ufw allow 67/udp
+        log_info "UFW: Port 67/udp (DHCP) dibuka"
+    fi
+    
+    echo ""
+    log_info "DHCP Server (isc-dhcp-server) berhasil diinstall dan dikonfigurasi"
+    log_info "=========================================="
+    log_info "Interface: $DHCP_INTERFACE"
+    log_info "Subnet: $DHCP_SUBNET/$DHCP_PREFIX ($DHCP_NETMASK)"
+    log_info "Range IP: $DHCP_RANGE_START - $DHCP_RANGE_END"
+    log_info "Gateway: $DHCP_ROUTER"
+    log_info "DNS: $DHCP_DNS"
+    log_info "=========================================="
+    log_info "Status service:"
+    systemctl status isc-dhcp-server --no-pager | head -5
+    log_info "Log file: /var/log/syslog"
+}
+
 # Fungsi untuk install WordPress
 install_wordpress() {
     log_step "Menginstall WordPress..."
@@ -645,7 +986,7 @@ SQLEOF
     log_info "Database: wordpress | User: wpuser | Password: wp123456"
 }
 
-# Fungsi untuk install semua service (tanpa DNS)
+# Fungsi untuk install semua service (tanpa DNS dan DHCP)
 install_all_basic() {
     log_step "Memulai instalasi semua service basic..."
     update_system
@@ -664,14 +1005,15 @@ install_all_basic() {
     log_info "=========================================="
 }
 
-# Fungsi untuk install semua service lengkap dengan DNS
+# Fungsi untuk install semua service lengkap dengan DNS dan DHCP
 install_all_complete() {
-    log_step "Memulai instalasi semua service lengkap dengan DNS..."
+    log_step "Memulai instalasi semua service lengkap dengan DNS dan DHCP..."
     update_system
     install_apache
     install_ftp
     install_ssh
     install_dns
+    install_dhcp
     install_wordpress
     
     echo ""
@@ -687,6 +1029,12 @@ install_all_complete() {
     log_info "  DNS Server IP: ${DNS_IP}"
     log_info "  Domain: ${DOMAIN_NAME}"
     log_info "=========================================="
+    log_info "DHCP Server Information:"
+    log_info "  Interface: $DHCP_INTERFACE"
+    log_info "  Subnet: $DHCP_SUBNET/$DHCP_PREFIX"
+    log_info "  Range: $DHCP_RANGE_START - $DHCP_RANGE_END"
+    log_info "  Gateway: $DHCP_ROUTER"
+    log_info "=========================================="
 }
 
 # Fungsi untuk menampilkan menu utama
@@ -696,16 +1044,17 @@ show_menu() {
     echo -e "${YELLOW}${BOLD}          MENU INSTALASI               ${NC}"
     echo -e "${YELLOW}${BOLD}========================================${NC}"
     echo -e "${GREEN}1.${NC} Install Semua Service (Basic: Apache2 + FTP + SSH + WP)"
-    echo -e "${GREEN}2.${NC} Install Semua Service (Complete: + DNS Server)"
+    echo -e "${GREEN}2.${NC} Install Semua Service (Complete: + DNS + DHCP)"
     echo -e "${CYAN}3.${NC} Install Apache2 (Web Server)"
     echo -e "${CYAN}4.${NC} Install FTP (vsftpd)"
     echo -e "${CYAN}5.${NC} Install SSH (Secure Server)"
     echo -e "${CYAN}6.${NC} Install DNS Server (Bind9)"
-    echo -e "${CYAN}7.${NC} Install WordPress (Optional)"
-    echo -e "${RED}8.${NC} Exit"
+    echo -e "${CYAN}7.${NC} Install DHCP Server (isc-dhcp-server)"
+    echo -e "${CYAN}8.${NC} Install WordPress (Optional)"
+    echo -e "${RED}9.${NC} Exit"
     echo -e "${YELLOW}========================================${NC}"
     echo ""
-    echo -ne "${BOLD}${GREEN}Pilih menu (1-8): ${NC}"
+    echo -ne "${BOLD}${GREEN}Pilih menu (1-9): ${NC}"
 }
 
 # Fungsi untuk membaca input menu
@@ -753,9 +1102,13 @@ while true; do
             ;;
         7)
             echo ""
-            install_wordpress
+            install_dhcp
             ;;
         8)
+            echo ""
+            install_wordpress
+            ;;
+        9)
             echo ""
             log_info "Terima kasih telah menggunakan TechCorp Multi-Service Installer!"
             echo -e "${GREEN}========================================${NC}"
@@ -764,7 +1117,7 @@ while true; do
             exit 0
             ;;
         *)
-            log_error "Pilihan tidak valid! Silakan pilih 1-8"
+            log_error "Pilihan tidak valid! Silakan pilih 1-9"
             sleep 2
             ;;
     esac
