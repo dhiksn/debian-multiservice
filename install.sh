@@ -55,6 +55,45 @@ get_port_80_listener() {
     ss -tulpn 2>/dev/null | awk '/:80[[:space:]]/ && /LISTEN/ {print; exit}'
 }
 
+# Fungsi untuk membaca input dari terminal (bekerja meskipun dipipe)
+read_input() {
+    local prompt="$1"
+    local default="$2"
+    local input=""
+    
+    # Redirect input dari /dev/tty untuk membaca dari terminal, bukan dari pipe
+    exec < /dev/tty
+    
+    if [[ -n "$prompt" ]]; then
+        printf "$prompt"
+    fi
+    
+    if ! IFS= read -r input; then
+        echo ""
+        return 1
+    fi
+    
+    if [[ -z "$input" ]] && [[ -n "$default" ]]; then
+        echo "$default"
+    else
+        echo "$input"
+    fi
+    return 0
+}
+
+# Fungsi untuk membaca pilihan menu
+read_menu_choice() {
+    local choice=""
+    exec < /dev/tty
+    printf "\033[0;36mPilih opsi [1-8]: \033[0m"
+    if ! IFS= read -r choice; then
+        echo ""
+        return 1
+    fi
+    echo "$choice"
+    return 0
+}
+
 # Fungsi universal untuk memilih IP Address dari interface yang aktif
 select_ip() {
     local prompt_msg="$1"
@@ -64,6 +103,8 @@ select_ip() {
     local choice=""
     local selected_if=""
     local selected_ip=""
+    
+    exec < /dev/tty
 
     while IFS= read -r line; do
         interfaces+=("$line")
@@ -138,26 +179,6 @@ show_menu() {
     echo ""
 }
 
-prompt_menu_choice() {
-    while true; do
-        printf "\033[0;36mPilih opsi [1-8]: \033[0m"
-        if ! IFS= read -r CHOICE; then
-            echo ""
-            log_error "Gagal membaca input."
-            return 1
-        fi
-
-        case "$CHOICE" in
-            [1-8])
-                return 0
-                ;;
-            *)
-                log_error "Pilihan tidak valid. Masukkan angka 1-8."
-                ;;
-        esac
-    done
-}
-
 # ─── System Update ───────────────────────────────────────────
 system_update() {
     log_section "System Update & Upgrade"
@@ -227,8 +248,7 @@ install_apache() {
             <h2>Tentang Kami</h2>
             <p class="about-text">
                 <strong style="color:#2196F3">TechCorp</strong> adalah perusahaan teknologi terkemuka yang berdedikasi
-                untuk memberikan solusi digital inovatif kepada klien kami. Dengan pengalaman lebih dari 10 tahun,
-                kami telah membantu ratusan bisnis bertransformasi secara digital.
+                untuk memberikan solusi digital inovatif kepada klien kami.
             </p>
         </div>
         <div class="section" id="services">
@@ -237,12 +257,17 @@ install_apache() {
                 <div class="service-card">
                     <div class="icon">🌐</div>
                     <h3>Web Development</h3>
-                    <p>Pengembangan website dan aplikasi web modern, responsif, dan berperforma tinggi.</p>
+                    <p>Pengembangan website dan aplikasi web modern.</p>
                 </div>
                 <div class="service-card">
                     <div class="icon">🔒</div>
                     <h3>Cybersecurity</h3>
-                    <p>Perlindungan menyeluruh terhadap ancaman siber, audit keamanan, dan penetration testing.</p>
+                    <p>Perlindungan menyeluruh terhadap ancaman siber.</p>
+                </div>
+                <div class="service-card">
+                    <div class="icon">☁️</div>
+                    <h3>Cloud Solutions</h3>
+                    <p>Solusi cloud computing dan infrastruktur IT.</p>
                 </div>
             </div>
         </div>
@@ -257,7 +282,7 @@ install_apache() {
         </div>
     </div>
     <footer>
-        <p>&copy; 2024 <span>TechCorp Indonesia</span>. All Rights Reserved.</p>
+        <p>&copy; 2025 <span>TechCorp Indonesia</span>. All Rights Reserved.</p>
     </footer>
 </body>
 </html>
@@ -360,7 +385,7 @@ install_ssh() {
     cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak 2>/dev/null || true
 
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
     sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
 
     if ! id "admin" &>/dev/null; then
@@ -372,8 +397,8 @@ install_ssh() {
     chmod 700 /home/admin/.ssh
 
     cat > /home/admin/.ssh/authorized_keys << 'KEYEOF'
-# Ganti dengan public key Anda
-ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC0ExamplePlaceholderReplaceWithYourActualPublicKey== admin@techcorp
+# Ganti dengan public key Anda untuk keamanan lebih baik
+# ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC0ExamplePlaceholderReplaceWithYourActualPublicKey== admin@techcorp
 KEYEOF
 
     chown -R admin:admin /home/admin/.ssh
@@ -386,8 +411,9 @@ KEYEOF
         ufw allow 22/tcp
     fi
 
-    log_warn "PENTING: Ganti public key di /home/admin/.ssh/authorized_keys"
     log_info "✅ OpenSSH berhasil dikonfigurasi!"
+    log_info "   User: admin | Password: 123"
+    log_warn "   Untuk keamanan, segera ganti password dan tambahkan public key!"
 }
 
 # ─── BIND9 DNS Installation ──────────────────────────────────
@@ -402,17 +428,12 @@ install_dns() {
     
     log_info "DNS Server akan menggunakan IP: ${DNS_IP}"
 
-    echo -e "${CYAN}Masukkan nama domain (contoh: techcorp.local):${NC}"
-    printf "Domain name: "
-    read -r DOMAIN_NAME
-    
+    DOMAIN_NAME=$(read_input "Masukkan nama domain (contoh: techcorp.local): " "techcorp.local")
     [[ -z "$DOMAIN_NAME" ]] && DOMAIN_NAME="techcorp.local"
 
-    echo -e "${CYAN}Integrasi dengan IP Apache? (y/n):${NC}"
-    printf "Pilihan [y/n] (default y): "
-    read -r INTEGRATE_APACHE
+    INTEGRATE=$(read_input "Integrasi dengan IP Apache? (y/n) [default y]: " "y")
     
-    if [[ -z "$INTEGRATE_APACHE" ]] || [[ "$INTEGRATE_APACHE" == "y" ]]; then
+    if [[ "$INTEGRATE" == "y" ]] || [[ "$INTEGRATE" == "Y" ]] || [[ -z "$INTEGRATE" ]]; then
         if [[ -z "$APACHE_ACCESS_IP" ]]; then
             WEB_IP=$(select_ip "Pilih IP untuk web server")
         else
@@ -420,8 +441,7 @@ install_dns() {
         fi
         log_info "DNS akan mengarahkan ${DOMAIN_NAME} ke IP: ${WEB_IP}"
     else
-        printf "Masukkan IP web server: "
-        read -r WEB_IP
+        WEB_IP=$(read_input "Masukkan IP web server: " "$DNS_IP")
         [[ -z "$WEB_IP" ]] && WEB_IP="$DNS_IP"
     fi
 
@@ -475,6 +495,7 @@ FORWARDZONE
 
     log_info "✅ BIND9 berhasil diinstall!"
     log_info "   Domain: ${DOMAIN_NAME} -> ${WEB_IP}"
+    log_info "   DNS Server IP: ${DNS_IP}"
     log_info "   Testing: dig @${DNS_IP} ${DOMAIN_NAME}"
 }
 
@@ -496,14 +517,10 @@ install_dhcp() {
     DEFAULT_END="${n1}.${n2}.${n3}.200"
     
     echo -e "${CYAN}Masukkan range DHCP${NC}"
-    printf "Range mulai (default ${DEFAULT_START}): "
-    read -r DHCP_START
-    printf "Range akhir (default ${DEFAULT_END}): "
-    read -r DHCP_END
-    printf "Gateway (default ${n1}.${n2}.${n3}.1): "
-    read -r DHCP_GATEWAY
-    printf "DNS Server (default ${INTERFACE_IP},8.8.8.8): "
-    read -r DHCP_DNS
+    DHCP_START=$(read_input "Range mulai (default ${DEFAULT_START}): " "$DEFAULT_START")
+    DHCP_END=$(read_input "Range akhir (default ${DEFAULT_END}): " "$DEFAULT_END")
+    DHCP_GATEWAY=$(read_input "Gateway (default ${n1}.${n2}.${n3}.1): " "${n1}.${n2}.${n3}.1")
+    DHCP_DNS=$(read_input "DNS Server (default ${INTERFACE_IP},8.8.8.8): " "${INTERFACE_IP},8.8.8.8")
     
     [[ -z "$DHCP_START" ]] && DHCP_START="$DEFAULT_START"
     [[ -z "$DHCP_END" ]] && DHCP_END="$DEFAULT_END"
@@ -577,6 +594,7 @@ SQLEOF
 
     log_info "✅ WordPress berhasil diinstall!"
     log_info "   URL: http://$(hostname -I | awk '{print $1}')/wordpress"
+    log_info "   DB Name: wordpress_db | User: wp_user | Pass: WpTechCorp@2024"
 }
 
 # ─── Install All Services ────────────────────────────────────
@@ -591,16 +609,16 @@ install_all() {
     install_wordpress
     
     echo ""
-    echo -e "${GREEN}${BOLD}  ┌─────────────────────────────────────────────────┐${NC}"
-    echo -e "${GREEN}${BOLD}  │            RINGKASAN INSTALASI                   │${NC}"
-    echo -e "${GREEN}${BOLD}  ├─────────────────────────────────────────────────┤${NC}"
-    echo -e "${GREEN}${BOLD}  │${NC}  🌐 Apache2  : http://$(hostname -I | awk '{print $1}')           ${GREEN}${BOLD}│${NC}"
-    echo -e "${GREEN}${BOLD}  │${NC}  📁 FTP      : ftp://$(hostname -I | awk '{print $1}') (admin/123)${GREEN}${BOLD}│${NC}"
-    echo -e "${GREEN}${BOLD}  │${NC}  🔒 SSH      : ssh admin@$(hostname -I | awk '{print $1}')        ${GREEN}${BOLD}│${NC}"
-    echo -e "${GREEN}${BOLD}  │${NC}  🌐 DNS      : DNS Server aktif di port 53    ${GREEN}${BOLD}│${NC}"
-    echo -e "${GREEN}${BOLD}  │${NC}  📡 DHCP     : DHCP Server aktif              ${GREEN}${BOLD}│${NC}"
-    echo -e "${GREEN}${BOLD}  │${NC}  📝 WordPress: http://$(hostname -I | awk '{print $1}')/wordpress ${GREEN}${BOLD}│${NC}"
-    echo -e "${GREEN}${BOLD}  └─────────────────────────────────────────────────┘${NC}"
+    echo -e "${GREEN}${BOLD}  ┌──────────────────────────────────────────────────────────────┐${NC}"
+    echo -e "${GREEN}${BOLD}  │                    RINGKASAN INSTALASI                        │${NC}"
+    echo -e "${GREEN}${BOLD}  ├──────────────────────────────────────────────────────────────┤${NC}"
+    echo -e "${GREEN}${BOLD}  │${NC}  🌐 Apache2    : http://$(hostname -I | awk '{print $1}')                      ${GREEN}${BOLD}│${NC}"
+    echo -e "${GREEN}${BOLD}  │${NC}  📁 FTP        : ftp://$(hostname -I | awk '{print $1}') (admin/123)          ${GREEN}${BOLD}│${NC}"
+    echo -e "${GREEN}${BOLD}  │${NC}  🔒 SSH        : ssh admin@$(hostname -I | awk '{print $1}') (pass: 123)      ${GREEN}${BOLD}│${NC}"
+    echo -e "${GREEN}${BOLD}  │${NC}  🌐 DNS        : DNS Server aktif di port 53                                 ${GREEN}${BOLD}│${NC}"
+    echo -e "${GREEN}${BOLD}  │${NC}  📡 DHCP       : DHCP Server aktif                                           ${GREEN}${BOLD}│${NC}"
+    echo -e "${GREEN}${BOLD}  │${NC}  📝 WordPress  : http://$(hostname -I | awk '{print $1}')/wordpress          ${GREEN}${BOLD}│${NC}"
+    echo -e "${GREEN}${BOLD}  └──────────────────────────────────────────────────────────────┘${NC}"
 }
 
 # ─── Main Program ────────────────────────────────────────────
@@ -610,7 +628,12 @@ main() {
 
     while true; do
         show_menu
-        prompt_menu_choice || exit 1
+        CHOICE=$(read_menu_choice)
+        
+        if [[ -z "$CHOICE" ]]; then
+            log_error "Gagal membaca input."
+            continue
+        fi
         
         case $CHOICE in
             1) install_all ;;
@@ -624,10 +647,13 @@ main() {
                 echo -e "\n${CYAN}${BOLD}Terima kasih! Sampai jumpa.${NC}\n"
                 exit 0
                 ;;
+            *)
+                log_error "Pilihan tidak valid!"
+                ;;
         esac
 
         echo ""
-        read -r -p "$(echo -e "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}")"
+        read_input "Tekan Enter untuk kembali ke menu... " "" > /dev/null
         clear
         show_banner
     done
