@@ -61,11 +61,14 @@ read_input() {
     local default="$2"
     local input=""
     
-    # Redirect input dari /dev/tty untuk membaca dari terminal, bukan dari pipe
+    # Redirect input dari /dev/tty untuk membaca dari terminal
     exec < /dev/tty
     
     if [[ -n "$prompt" ]]; then
-        printf "$prompt"
+        # Gunakan printf dengan stdbuf untuk memastikan output langsung keluar
+        stdbuf -o0 printf "%s" "$prompt" 2>/dev/null || printf "%s" "$prompt"
+        # Force flush output
+        sync
     fi
     
     if ! IFS= read -r input; then
@@ -81,20 +84,7 @@ read_input() {
     return 0
 }
 
-# Fungsi untuk membaca pilihan menu
-read_menu_choice() {
-    local choice=""
-    exec < /dev/tty
-    printf "\033[0;36mPilih opsi [1-8]: \033[0m"
-    if ! IFS= read -r choice; then
-        echo ""
-        return 1
-    fi
-    echo "$choice"
-    return 0
-}
-
-# Fungsi universal untuk memilih IP Address dari interface yang aktif
+# Fungsi untuk memilih IP Address dari interface yang aktif
 select_ip() {
     local prompt_msg="$1"
     local interfaces=()
@@ -123,12 +113,9 @@ select_ip() {
     done
 
     while true; do
-        printf "\033[0;36m%s [1-%d] (default 1): \033[0m" "Pilih interface" "${#interfaces[@]}" >&2
-        if ! IFS= read -r choice < /dev/tty; then
-            echo "" >&2
-            return 1
-        fi
-
+        # Gunakan read_input dengan prompt yang benar
+        choice=$(read_input "\033[0;36mPilih interface [1-${#interfaces[@]}] (default 1): \033[0m" "1")
+        
         if [[ -z "$choice" ]]; then
             choice=1
         fi
@@ -628,10 +615,16 @@ main() {
 
     while true; do
         show_menu
-        CHOICE=$(read_menu_choice)
+        
+        # Tampilkan prompt pilihan
+        echo -ne "${CYAN}Pilih opsi [1-8]: ${NC}"
+        
+        # Baca input dari terminal
+        exec < /dev/tty
+        read -r CHOICE
         
         if [[ -z "$CHOICE" ]]; then
-            log_error "Gagal membaca input."
+            echo -e "\n${RED}[ERROR] Gagal membaca input.${NC}"
             continue
         fi
         
@@ -648,12 +641,14 @@ main() {
                 exit 0
                 ;;
             *)
-                log_error "Pilihan tidak valid!"
+                echo -e "${RED}[ERROR] Pilihan tidak valid!${NC}"
                 ;;
         esac
 
         echo ""
-        read_input "Tekan Enter untuk kembali ke menu... " "" > /dev/null
+        echo -ne "${YELLOW}Tekan Enter untuk kembali ke menu...${NC}"
+        exec < /dev/tty
+        read -r
         clear
         show_banner
     done
